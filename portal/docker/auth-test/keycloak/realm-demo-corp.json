@@ -1,0 +1,70 @@
+{
+  "realm": "demo-corp",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "clients": [
+    {
+      "clientId": "portal",
+      "name": "Portal App",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "portal-dev-secret-change-in-prod",
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:8000/auth/sso/callback"
+      ],
+      "webOrigins": ["+"],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect"
+    }
+  ],
+  "users": [
+    {
+      "username": "cntt.cv",
+      "email": "cntt.cv@demo-corp.local",
+      "firstName": "CNTT",
+      "lastName": "ChuyenVien",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Pass123!", "temporary": false }],
+      "attributes": { "department": ["CNTT"] }
+    },
+    {
+      "username": "cntt.ld",
+      "email": "cntt.ld@demo-corp.local",
+      "firstName": "CNTT",
+      "lastName": "LanhDao",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Pass123!", "temporary": false }],
+      "attributes": { "department": ["CNTT"] }
+    },
+    {
+      "username": "ban.cv",
+      "email": "ban.cv@demo-corp.local",
+      "firstName": "Ban",
+      "lastName": "ChuyenVien",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Pass123!", "temporary": false }],
+      "attributes": { "department": ["KETOAN"] }
+    },
+    {
+      "username": "ban.ld",
+      "email": "ban.ld@demo-corp.local",
+      "firstName": "Ban",
+      "lastName": "LanhDao",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "Pass123!", "temporary": false }],
+      "attributes": { "department": ["KETOAN"] }
+    }
+  ]
+}

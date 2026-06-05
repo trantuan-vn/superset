@@ -1,0 +1,101 @@
+# Portal auth test stack — LDAP + OIDC (Keycloak) + PKI (Step CA)
+# Used for Phase 2 (LDAP/SSO) and Phase 3 (digital signature) Gate testing.
+#
+# Start:
+#   docker compose -f portal/docker/docker-compose.auth-test.yml up -d
+#
+# See docs/portal/SPEC-PORTAL-v1.md §11.5
+
+services:
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: portal-auth-openldap
+    environment:
+      LDAP_ORGANISATION: Demo Corporation
+      LDAP_DOMAIN: demo-corp.local
+      LDAP_ADMIN_PASSWORD: admin
+      LDAP_CONFIG_PASSWORD: config
+      LDAP_TLS: "false"
+    ports:
+      - "1389:389"
+      - "1636:636"
+    volumes:
+      - ./auth-test/ldap/bootstrap.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/bootstrap.ldif
+    healthcheck:
+      test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost", "-b", "dc=demo-corp,dc=local", "-D", "cn=admin,dc=demo-corp,dc=local", "-w", "admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: portal-auth-phpldapadmin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: openldap
+      PHPLDAPADMIN_HTTPS: "false"
+    ports:
+      - "8081:80"
+    depends_on:
+      openldap:
+        condition: service_healthy
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: portal-auth-keycloak
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./auth-test/keycloak/realm-demo-corp.json:/opt/keycloak/data/import/realm-demo-corp.json:ro
+    depends_on:
+      openldap:
+        condition: service_healthy
+
+  step-ca:
+    image: smallstep/step-ca:latest
+    container_name: portal-auth-step-ca
+    environment:
+      DOCKER_STEPCA_INIT_NAME: Portal Demo CA
+      DOCKER_STEPCA_INIT_DNS_NAMES: localhost,step-ca,portal-auth-step-ca
+      DOCKER_STEPCA_INIT_PROVISIONER_NAME: portal-admin
+      DOCKER_STEPCA_INIT_PASSWORD: changeit
+    ports:
+      - "9443:9443"
+    volumes:
+      - step_ca_data:/home/step
+      - ./auth-test/pki:/home/step/export
+
+  step-ca-bootstrap:
+    image: smallstep/step-ca:latest
+    container_name: portal-auth-step-ca-bootstrap
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -e
+        echo "Waiting for step-ca..."
+        for i in $(seq 1 60); do
+          if step ca health --ca-url https://step-ca:9443 --root /home/step/certs/root_ca.crt 2>/dev/null; then
+            break
+          fi
+          sleep 2
+        done
+        step ca bootstrap --ca-url https://step-ca:9443 --fingerprint "$$(step ca fingerprint --ca-url https://step-ca:9443)" --install
+        cp /home/step/certs/root_ca.crt /home/step/export/root_ca.crt
+        echo "Root CA exported to portal/docker/auth-test/pki/root_ca.crt"
+        step ca provisioner add portal-jwk --ca-url https://step-ca:9443 --create 2>/dev/null || true
+        step ca provisioner add portal-acme --ca-url https://step-ca:9443 --type ACME 2>/dev/null || true
+        echo "Step CA ready. Fingerprint:"
+        step ca fingerprint --ca-url https://step-ca:9443
+    depends_on:
+      - step-ca
+    volumes:
+      - step_ca_data:/home/step
+      - ./auth-test/pki:/home/step/export
+
+volumes:
+  step_ca_data:

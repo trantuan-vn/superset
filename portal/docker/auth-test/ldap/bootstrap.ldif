@@ -1,0 +1,54 @@
+# Demo LDAP tree for Portal Phase 2 / Gate 2 testing.
+# Base DN: dc=demo-corp,dc=local
+
+dn: ou=people,dc=demo-corp,dc=local
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=departments,dc=demo-corp,dc=local
+objectClass: organizationalUnit
+ou: departments
+
+dn: uid=cntt.cv,ou=people,dc=demo-corp,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+uid: cntt.cv
+sn: ChuyenVien
+cn: CNTT Chuyen Vien
+mail: cntt.cv@demo-corp.local
+userPassword: Pass123!
+departmentNumber: CNTT
+
+dn: uid=cntt.ld,ou=people,dc=demo-corp,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+uid: cntt.ld
+sn: LanhDao
+cn: CNTT Lanh Dao
+mail: cntt.ld@demo-corp.local
+userPassword: Pass123!
+departmentNumber: CNTT
+
+dn: uid=ban.cv,ou=people,dc=demo-corp,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+uid: ban.cv
+sn: BanCV
+cn: Ban NV Chuyen Vien
+mail: ban.cv@demo-corp.local
+userPassword: Pass123!
+departmentNumber: KETOAN
+
+dn: uid=ban.ld,ou=people,dc=demo-corp,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+uid: ban.ld
+sn: BanLD
+cn: Ban NV Lanh Dao
+mail: ban.ld@demo-corp.local
+userPassword: Pass123!
+departmentNumber: KETOAN
