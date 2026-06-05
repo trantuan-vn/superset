@@ -1,0 +1,35 @@
+{
+  "app": {
+    "name": "Export Portal",
+    "tagline": "Enterprise data export approval workflow"
+  },
+  "nav": {
+    "overview": "Overview",
+    "health": "System health"
+  },
+  "header": {
+    "notifications": "Notifications",
+    "userMenu": "User menu",
+    "language": "Language"
+  },
+  "home": {
+    "title": "Home",
+    "welcome": "Welcome to Export Portal",
+    "description": "Phase 0 scaffold — app shell, design tokens, and health check. Login arrives in Phase 1.",
+    "phase": "Phase 0 — Scaffold"
+  },
+  "health": {
+    "title": "System health",
+    "checking": "Checking…",
+    "apiStatus": "API",
+    "database": "Database",
+    "environment": "Environment",
+    "retry": "Retry",
+    "error": "Unable to reach backend API"
+  },
+  "common": {
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "openMenu": "Open navigation menu"
+  }
+}

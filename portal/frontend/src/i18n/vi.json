@@ -1,0 +1,35 @@
+{
+  "app": {
+    "name": "Portal Kết xuất",
+    "tagline": "Quy trình duyệt và kết xuất dữ liệu doanh nghiệp"
+  },
+  "nav": {
+    "overview": "Tổng quan",
+    "health": "Trạng thái hệ thống"
+  },
+  "header": {
+    "notifications": "Thông báo",
+    "userMenu": "Menu người dùng",
+    "language": "Ngôn ngữ"
+  },
+  "home": {
+    "title": "Trang chủ",
+    "welcome": "Chào mừng đến Portal Kết xuất",
+    "description": "Khung ứng dụng Phase 0 — shell, design tokens và health check. Đăng nhập sẽ có từ Phase 1.",
+    "phase": "Phase 0 — Scaffold"
+  },
+  "health": {
+    "title": "Trạng thái hệ thống",
+    "checking": "Đang kiểm tra…",
+    "apiStatus": "API",
+    "database": "Cơ sở dữ liệu",
+    "environment": "Môi trường",
+    "retry": "Thử lại",
+    "error": "Không thể kết nối API backend"
+  },
+  "common": {
+    "collapseSidebar": "Thu gọn menu",
+    "expandSidebar": "Mở rộng menu",
+    "openMenu": "Mở menu điều hướng"
+  }
+}

@@ -1,0 +1,61 @@
+# Portal Phase 0 stack — PostgreSQL + API + Web UI
+#
+# Start from repo root:
+#   docker compose -f portal/docker/docker-compose.portal.yml up -d --build
+#
+# Verify:
+#   curl -f http://localhost:8000/health
+#   open http://localhost:3000/health-ui
+
+services:
+  portal-db:
+    image: postgres:17
+    container_name: portal-db
+    environment:
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: portal
+      POSTGRES_DB: portal
+    ports:
+      - "5433:5432"
+    volumes:
+      - portal_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portal -d portal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  portal-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: backend
+    container_name: portal-api
+    environment:
+      DATABASE_URL: postgresql://portal:portal@portal-db:5432/portal
+      APP_ENV: development
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+    ports:
+      - "8000:8000"
+    depends_on:
+      portal-db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    volumes:
+      - ../backend:/app/backend
+
+  portal-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: frontend
+    container_name: portal-web
+    ports:
+      - "3000:80"
+    depends_on:
+      - portal-api
+
+volumes:
+  portal_db_data:
