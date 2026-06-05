@@ -14,16 +14,38 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+"""Audit logging service."""
+
+import uuid
+from typing import Any
+
+from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
-from app.models.tenant import Tenant, TenantSettings
-from app.models.user import SystemRole, User, UserStatus
 
-__all__ = [
-    "AuditLog",
-    "SystemRole",
-    "Tenant",
-    "TenantSettings",
-    "User",
-    "UserStatus",
-]
+
+def write_audit_log(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    actor_id: uuid.UUID | None = None,
+    payload: dict[str, Any] | None = None,
+    ip_address: str | None = None,
+) -> AuditLog:
+    """Persist an immutable audit log entry."""
+    entry = AuditLog(
+        tenant_id=tenant_id,
+        actor_id=actor_id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        payload=payload,
+        ip_address=ip_address,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry

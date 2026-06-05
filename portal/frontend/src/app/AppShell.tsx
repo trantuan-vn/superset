@@ -19,16 +19,25 @@
 import {
   DashboardOutlined,
   HeartOutlined,
+  LogoutOutlined,
   MenuFoldOutlined,
-  MenuUnfoldOutlined,
   MenuOutlined,
+  MenuUnfoldOutlined,
+  SettingOutlined,
+  TeamOutlined,
+  FileTextOutlined,
+  AuditOutlined,
+  CheckSquareOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
-import { Button, Drawer, Grid, Layout, Menu, Segmented, Space } from 'antd';
+import { Button, Drawer, Dropdown, Grid, Layout, Menu, Segmented, Space, Tag } from 'antd';
 import type { MenuProps } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
+import { useAuth } from '@/features/auth/useAuth';
+import { navItemsForRole } from '@/features/auth/navConfig';
 import { layout as layoutTokens } from '@/design-system/tokens';
 
 import styles from './AppShell.module.css';
@@ -36,12 +45,25 @@ import styles from './AppShell.module.css';
 const { Header, Sider, Content } = Layout;
 const SIDEBAR_STORAGE_KEY = 'portal.sidebar.collapsed';
 
-type NavKey = '/' | '/health-ui';
+const NAV_ICONS: Record<string, React.ReactNode> = {
+  '/dashboard': <DashboardOutlined aria-hidden />,
+  '/admin/settings': <SettingOutlined aria-hidden />,
+  '/admin/departments': <TeamOutlined aria-hidden />,
+  '/admin/users': <TeamOutlined aria-hidden />,
+  '/cntt/templates': <FileTextOutlined aria-hidden />,
+  '/cntt/approvals': <CheckSquareOutlined aria-hidden />,
+  '/dept/templates': <FileTextOutlined aria-hidden />,
+  '/dept/transactions': <SwapOutlined aria-hidden />,
+  '/dept/approvals': <CheckSquareOutlined aria-hidden />,
+  '/audit': <AuditOutlined aria-hidden />,
+  '/health-ui': <HeartOutlined aria-hidden />,
+};
 
 export function AppShell() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, tenant, logout } = useAuth();
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
 
@@ -55,25 +77,25 @@ export function AppShell() {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
   }, [collapsed]);
 
-  const selectedKey = useMemo<NavKey>(() => {
-    if (location.pathname.startsWith('/health-ui')) {
-      return '/health-ui';
-    }
-    return '/';
-  }, [location.pathname]);
+  const allowedNav = useMemo(
+    () => (user ? navItemsForRole(user.system_role) : []),
+    [user],
+  );
 
-  const menuItems: MenuProps['items'] = [
-    {
-      key: '/',
-      icon: <DashboardOutlined aria-hidden />,
-      label: t('nav.overview'),
-    },
-    {
-      key: '/health-ui',
-      icon: <HeartOutlined aria-hidden />,
-      label: t('nav.health'),
-    },
-  ];
+  const selectedKey = useMemo(() => {
+    const match = allowedNav.find((item) =>
+      item.key === '/dashboard'
+        ? location.pathname === '/dashboard' || location.pathname === '/'
+        : location.pathname.startsWith(item.key),
+    );
+    return match?.key ?? '/dashboard';
+  }, [allowedNav, location.pathname]);
+
+  const menuItems: MenuProps['items'] = allowedNav.map((item) => ({
+    key: item.key,
+    icon: NAV_ICONS[item.key] ?? <DashboardOutlined aria-hidden />,
+    label: t(item.labelKey),
+  }));
 
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
     navigate(key);
@@ -85,6 +107,25 @@ export function AppShell() {
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => !prev);
   }, []);
+
+  const handleLogout = useCallback(async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  }, [logout, navigate]);
+
+  const userMenuItems: MenuProps['items'] = [
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: t('auth.logout'),
+      onClick: () => {
+        void handleLogout();
+      },
+    },
+  ];
+
+  const appTitle = tenant?.branding?.app_name ?? t('app.name');
+  const primaryColor = tenant?.branding?.primary_color;
 
   const sidebarContent = (
     <Menu
@@ -132,10 +173,17 @@ export function AppShell() {
                 onClick={toggleCollapsed}
               />
             )}
-            <span className={styles.logoMark} aria-hidden>
+            <span
+              className={styles.logoMark}
+              style={primaryColor ? { background: primaryColor } : undefined}
+              aria-hidden
+            >
               P
             </span>
-            <h1 className={styles.appTitle}>{t('app.name')}</h1>
+            <h1 className={styles.appTitle}>{appTitle}</h1>
+            {tenant ? (
+              <Tag className={styles.tenantBadge}>{tenant.name}</Tag>
+            ) : null}
           </div>
 
           <div className={styles.headerRight}>
@@ -152,9 +200,11 @@ export function AppShell() {
                   void i18n.changeLanguage(String(value));
                 }}
               />
-              <Button type="text" aria-label={t('header.userMenu')}>
-                Demo User
-              </Button>
+              <Dropdown menu={{ items: userMenuItems }} trigger={['click']}>
+                <Button type="text" aria-label={t('header.userMenu')}>
+                  {user?.display_name ?? t('header.userMenu')}
+                </Button>
+              </Dropdown>
             </Space>
           </div>
         </Header>
@@ -167,7 +217,7 @@ export function AppShell() {
       </Layout>
 
       <Drawer
-        title={t('app.name')}
+        title={appTitle}
         placement="left"
         onClose={() => setDrawerOpen(false)}
         open={drawerOpen}

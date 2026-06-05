@@ -16,28 +16,18 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createContext } from 'react';
 
-import { AppShell } from '@/app/AppShell';
-import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { HealthUiPage } from '@/pages/HealthUiPage';
-import { LoginPage } from '@/pages/LoginPage';
+import type { AuthTenant, AuthUser, LoginPayload } from '@/api/auth';
 
-export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
-  {
-    path: '/',
-    element: (
-      <ProtectedRoute>
-        <AppShell />
-      </ProtectedRoute>
-    ),
-    children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
-      { path: 'dashboard', element: <DashboardPage /> },
-      { path: 'health-ui', element: <HealthUiPage /> },
-    ],
-  },
-  { path: '*', element: <Navigate to="/dashboard" replace /> },
-]);
+export interface AuthContextValue {
+  user: AuthUser | null;
+  tenant: AuthTenant | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  login: (payload: LoginPayload) => Promise<void>;
+  logout: () => Promise<void>;
+  refresh: () => Promise<void>;
+}
+
+export const AuthContext = createContext<AuthContextValue | null>(null);

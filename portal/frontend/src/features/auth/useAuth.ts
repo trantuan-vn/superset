@@ -16,28 +16,14 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { useContext } from 'react';
 
-import { AppShell } from '@/app/AppShell';
-import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { HealthUiPage } from '@/pages/HealthUiPage';
-import { LoginPage } from '@/pages/LoginPage';
+import { AuthContext, type AuthContextValue } from '@/features/auth/authContext';
 
-export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
-  {
-    path: '/',
-    element: (
-      <ProtectedRoute>
-        <AppShell />
-      </ProtectedRoute>
-    ),
-    children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
-      { path: 'dashboard', element: <DashboardPage /> },
-      { path: 'health-ui', element: <HealthUiPage /> },
-    ],
-  },
-  { path: '*', element: <Navigate to="/dashboard" replace /> },
-]);
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+}

@@ -8,6 +8,17 @@
 #   open http://localhost:3000/health-ui
 
 services:
+  portal-redis:
+    image: redis:7-alpine
+    container_name: portal-redis
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   portal-db:
     image: postgres:17
     container_name: portal-db
@@ -33,15 +44,20 @@ services:
     container_name: portal-api
     environment:
       DATABASE_URL: postgresql://portal:portal@portal-db:5432/portal
+      REDIS_URL: redis://portal-redis:6379/0
       APP_ENV: development
       CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      SESSION_COOKIE_SECURE: "false"
     ports:
       - "8000:8000"
     depends_on:
       portal-db:
         condition: service_healthy
+      portal-redis:
+        condition: service_healthy
     command: >
       sh -c "alembic upgrade head &&
+             python -m app.seed &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ../backend:/app/backend

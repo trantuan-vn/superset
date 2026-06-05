@@ -25,6 +25,7 @@ import { RouterProvider } from 'react-router-dom';
 
 import { router } from '@/app/router';
 import { defaultTheme } from '@/design-system/theme';
+import { AuthProvider } from '@/features/auth/AuthProvider';
 import '@/i18n';
 
 import './global.css';
@@ -47,7 +48,9 @@ createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ConfigProvider theme={defaultTheme} locale={viVN}>
-        <RouterProvider router={router} />
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
       </ConfigProvider>
     </QueryClientProvider>
   </StrictMode>,

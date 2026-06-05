@@ -16,28 +16,28 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { Spin } from 'antd';
+import { Navigate, useLocation } from 'react-router-dom';
 
-import { AppShell } from '@/app/AppShell';
-import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { HealthUiPage } from '@/pages/HealthUiPage';
-import { LoginPage } from '@/pages/LoginPage';
+import { useAuth } from '@/features/auth/useAuth';
 
-export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> },
-  {
-    path: '/',
-    element: (
-      <ProtectedRoute>
-        <AppShell />
-      </ProtectedRoute>
-    ),
-    children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
-      { path: 'dashboard', element: <DashboardPage /> },
-      { path: 'health-ui', element: <HealthUiPage /> },
-    ],
-  },
-  { path: '*', element: <Navigate to="/dashboard" replace /> },
-]);
+import styles from './ProtectedRoute.module.css';
+
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className={styles.loading} role="status" aria-live="polite">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  return children;
+}

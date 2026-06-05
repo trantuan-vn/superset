@@ -5,18 +5,47 @@
   },
   "nav": {
     "overview": "Overview",
-    "health": "System health"
+    "health": "System health",
+    "tenantSettings": "Tenant settings",
+    "departments": "Departments",
+    "users": "Users",
+    "cnttTemplates": "Export templates (IT)",
+    "cnttApprovals": "Template approval queue",
+    "deptTemplates": "Department templates",
+    "deptTransactions": "Export transactions",
+    "deptApprovals": "Approvals & downloads",
+    "audit": "Audit log"
   },
   "header": {
     "notifications": "Notifications",
     "userMenu": "User menu",
     "language": "Language"
   },
-  "home": {
-    "title": "Home",
-    "welcome": "Welcome to Export Portal",
-    "description": "Phase 0 scaffold — app shell, design tokens, and health check. Login arrives in Phase 1.",
-    "phase": "Phase 0 — Scaffold"
+  "auth": {
+    "loginTitle": "Sign in",
+    "loginSubtitle": "Enter your credentials to access the portal",
+    "tenantSlug": "Organization code",
+    "username": "Email / Username",
+    "password": "Password",
+    "rememberMe": "Remember me",
+    "loginButton": "Sign in",
+    "logout": "Sign out",
+    "loginError": "Sign in failed. Please try again.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "tenantRequired": "Organization code is required",
+    "usernameRequired": "Email or username is required",
+    "passwordRequired": "Password is required"
+  },
+  "dashboard": {
+    "title": "Overview",
+    "welcome": "Welcome, {{name}}",
+    "description": "You are working in {{tenant}}. Workflow features will be added in upcoming phases.",
+    "phase": "Phase 1 — Login & Session",
+    "stats": {
+      "pendingApprovals": "Pending approvals",
+      "templates": "Export templates",
+      "completed": "Completed"
+    }
   },
   "health": {
     "title": "System health",

@@ -1,6 +1,6 @@
-# Portal Kết xuất — Phase 0
+# Portal Kết xuất — Phase 1
 
-Scaffold cho Portal quy trình kết xuất dữ liệu trên Apache Superset. Phase 0 gồm backend health check, migration baseline (`tenants`, `tenant_settings`), design tokens và App Shell — **chưa có login**.
+Scaffold + **đăng nhập local**, session Redis, multi-tenant cho Portal quy trình kết xuất dữ liệu trên Apache Superset.
 
 Đặc tả đầy đủ: [`docs/portal/SPEC-PORTAL-v1.md`](../docs/portal/SPEC-PORTAL-v1.md)
 
@@ -19,39 +19,46 @@ Từ **root repo**:
 docker compose -f portal/docker/docker-compose.portal.yml up -d --build
 ```
 
-### 2. Kiểm tra
+### 2. Đăng nhập demo
+
+| Trường | Giá trị |
+|---|---|
+| Mã doanh nghiệp | `demo-corp` |
+| Email | `admin@demo-corp` / `cntt.cv@demo-corp` / `cntt.ld@demo-corp` |
+| Mật khẩu | `Pass123!` |
+
+Mở http://localhost:3000 → redirect `/login` → sau đăng nhập vào `/dashboard`.
+
+### 3. Kiểm tra API
 
 ```bash
-# Backend health
+# Health
 curl -f http://localhost:8000/health
 
-# Migration đã chạy (trong container portal-api)
-docker compose -f portal/docker/docker-compose.portal.yml exec portal-api alembic current
+# Login (lưu cookie session)
+curl -c /tmp/portal.cookie -X POST http://localhost:8000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"tenant_slug":"demo-corp","username":"admin@demo-corp","password":"Pass123!"}'
+
+# Me
+curl -b /tmp/portal.cookie http://localhost:8000/auth/me
 ```
 
-Mở trình duyệt:
-
-| URL | Mô tả |
-|---|---|
-| http://localhost:3000 | App shell (trang chủ) |
-| http://localhost:3000/health-ui | Health UI — gọi `/health` qua proxy nginx |
-| http://localhost:8000/docs | OpenAPI (FastAPI) |
-
-### 3. Dừng stack
+### 4. Dừng stack
 
 ```bash
 docker compose -f portal/docker/docker-compose.portal.yml down
 ```
-
-Giữ dữ liệu DB: bỏ `-v`. Xóa volume: `docker compose ... down -v`.
 
 ## Biến môi trường
 
 | Biến | Mặc định | Mô tả |
 |---|---|---|
 | `DATABASE_URL` | `postgresql://portal:portal@localhost:5433/portal` | PostgreSQL Portal DB |
-| `APP_NAME` | `Portal Kết xuất` | Tên hiển thị API health |
-| `APP_ENV` | `development` | Môi trường (`development` / `staging` / `production`) |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis session store |
+| `SESSION_TTL_HOURS` | `8` | Thời hạn session (giờ) |
+| `MAX_LOGIN_ATTEMPTS` | `5` | Khóa tài khoản sau N lần sai |
+| `SESSION_COOKIE_SECURE` | `false` | Bật `true` trên production HTTPS |
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Origins được phép gọi API |
 | `VITE_API_URL` | *(trống trong Docker)* | Base URL API cho frontend dev/build |
 
@@ -66,8 +73,9 @@ cd portal/backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp ../.env.example .env
-# Cần PostgreSQL chạy (vd. chỉ portal-db từ compose)
+# Cần PostgreSQL + Redis (vd. chỉ portal-db, portal-redis từ compose)
 alembic upgrade head
+python -m app.seed
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -99,7 +107,7 @@ npm run lint && npm run typecheck
 
 ```
 portal/
-├── backend/          # FastAPI + Alembic
+├── backend/          # FastAPI + Alembic + Redis session
 ├── frontend/         # React 18 + Vite + Ant Design 5
 ├── docker/
 │   ├── Dockerfile
@@ -108,15 +116,16 @@ portal/
 └── k8s/helm/portal/  # Helm chart — Phase 12
 ```
 
-## Gate 0 — Checklist
+## Gate 1 — Checklist
 
-- [ ] `docker compose -f portal/docker/docker-compose.portal.yml up` thành công
-- [ ] `GET /health` → 200, `database: connected`
-- [ ] `alembic current` → `0001_baseline`
-- [ ] UI: sidebar collapse, responsive ≥1280px / ≥768px (drawer mobile)
-- [ ] `/health-ui` hiển thị trạng thái API
-- [ ] ESLint + TypeScript strict pass (`npm run lint`, `npm run typecheck`)
+- [ ] `POST /auth/login` + `GET /auth/me` + `POST /auth/logout` OK
+- [ ] Session cookie HttpOnly; tenant isolation (user chỉ thuộc 1 tenant)
+- [ ] Khóa tài khoản sau 5 lần đăng nhập sai
+- [ ] UI: trang login split layout, validation inline, loading state
+- [ ] UI: dashboard welcome + stats placeholder, menu theo `system_role`
+- [ ] UI: user menu đăng xuất, tenant badge trên header
+- [ ] Session hết hạn → redirect login + toast
 
 ## Phase tiếp theo
 
-**Phase 1:** Login local, Redis session, `users` table, trang đăng nhập — xem §7 trong spec.
+**Phase 2:** SSO/LDAP (feature flag) — xem §7 và §12 trong spec.

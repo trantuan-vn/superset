@@ -5,18 +5,47 @@
   },
   "nav": {
     "overview": "Tổng quan",
-    "health": "Trạng thái hệ thống"
+    "health": "Trạng thái hệ thống",
+    "tenantSettings": "Cài đặt tenant",
+    "departments": "Phòng ban",
+    "users": "Người dùng",
+    "cnttTemplates": "Mẫu kết xuất (CNTT)",
+    "cnttApprovals": "Hàng chờ duyệt mẫu",
+    "deptTemplates": "Mẫu của phòng ban",
+    "deptTransactions": "Giao dịch kết xuất",
+    "deptApprovals": "Chờ duyệt & Tải file",
+    "audit": "Nhật ký"
   },
   "header": {
     "notifications": "Thông báo",
     "userMenu": "Menu người dùng",
     "language": "Ngôn ngữ"
   },
-  "home": {
-    "title": "Trang chủ",
-    "welcome": "Chào mừng đến Portal Kết xuất",
-    "description": "Khung ứng dụng Phase 0 — shell, design tokens và health check. Đăng nhập sẽ có từ Phase 1.",
-    "phase": "Phase 0 — Scaffold"
+  "auth": {
+    "loginTitle": "Đăng nhập",
+    "loginSubtitle": "Nhập thông tin tài khoản để truy cập Portal",
+    "tenantSlug": "Mã doanh nghiệp",
+    "username": "Email / Tên đăng nhập",
+    "password": "Mật khẩu",
+    "rememberMe": "Ghi nhớ đăng nhập",
+    "loginButton": "Đăng nhập",
+    "logout": "Đăng xuất",
+    "loginError": "Đăng nhập thất bại. Vui lòng thử lại.",
+    "sessionExpired": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+    "tenantRequired": "Vui lòng nhập mã doanh nghiệp",
+    "usernameRequired": "Vui lòng nhập email hoặc tên đăng nhập",
+    "passwordRequired": "Vui lòng nhập mật khẩu"
+  },
+  "dashboard": {
+    "title": "Tổng quan",
+    "welcome": "Xin chào, {{name}}",
+    "description": "Bạn đang làm việc tại {{tenant}}. Các chức năng workflow sẽ được bổ sung ở các Phase tiếp theo.",
+    "phase": "Phase 1 — Đăng nhập & Session",
+    "stats": {
+      "pendingApprovals": "Chờ duyệt",
+      "templates": "Mẫu kết xuất",
+      "completed": "Hoàn thành"
+    }
   },
   "health": {
     "title": "Trạng thái hệ thống",

@@ -14,16 +14,21 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+"""Password hashing utilities."""
 
-from app.models.audit import AuditLog
-from app.models.tenant import Tenant, TenantSettings
-from app.models.user import SystemRole, User, UserStatus
+import bcrypt
 
-__all__ = [
-    "AuditLog",
-    "SystemRole",
-    "Tenant",
-    "TenantSettings",
-    "User",
-    "UserStatus",
-]
+
+def hash_password(plain: str) -> str:
+    """Return a bcrypt hash for the given plaintext password."""
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str | None) -> bool:
+    """Verify plaintext against a stored bcrypt hash."""
+    if not hashed:
+        return False
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False

@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     database_url: str = (
         "postgresql://portal:portal@localhost:5433/portal"
     )
+    redis_url: str = "redis://localhost:6379/0"
+    session_secret: str = "change-me-in-production-use-64-random-bytes"
+    session_ttl_hours: int = 8
+    session_cookie_secure: bool = False
+    session_cookie_samesite: str = "lax"
+    max_login_attempts: int = 5
+    login_lockout_minutes: int = 30
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
 

@@ -19,7 +19,10 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 from sqlalchemy import (
     Boolean,
@@ -59,7 +62,12 @@ class Tenant(Base):
     slug: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[TenantStatus] = mapped_column(
-        Enum(TenantStatus, name="tenant_status", native_enum=True),
+        Enum(
+            TenantStatus,
+            name="tenant_status",
+            native_enum=True,
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
         nullable=False,
         default=TenantStatus.ACTIVE,
     )
@@ -70,6 +78,7 @@ class Tenant(Base):
     settings: Mapped["TenantSettings"] = relationship(
         "TenantSettings", back_populates="tenant", uselist=False
     )
+    users: Mapped[list["User"]] = relationship("User", back_populates="tenant")
 
 
 class TenantSettings(Base):
@@ -84,7 +93,12 @@ class TenantSettings(Base):
         Boolean, nullable=False, default=False
     )
     auth_mode: Mapped[AuthMode] = mapped_column(
-        Enum(AuthMode, name="auth_mode", native_enum=True),
+        Enum(
+            AuthMode,
+            name="auth_mode",
+            native_enum=True,
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
         nullable=False,
         default=AuthMode.LOCAL,
     )
