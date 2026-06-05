@@ -4,7 +4,7 @@
 # Start:
 #   docker compose -f portal/docker/docker-compose.auth-test.yml up -d
 #
-# See docs/portal/SPEC-PORTAL-v1.md §11.5
+# See docs/portal/SPEC-PORTAL-v1.md §12
 
 services:
   openldap:
@@ -19,13 +19,33 @@ services:
     ports:
       - "1389:389"
       - "1636:636"
-    volumes:
-      - ./auth-test/ldap/bootstrap.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/bootstrap.ldif
+    # Do not bind-mount bootstrap LDIF into slapd init — osixia fails on Docker Desktop (sed/rm on mount).
     healthcheck:
       test: ["CMD", "ldapsearch", "-x", "-H", "ldap://localhost", "-b", "dc=demo-corp,dc=local", "-D", "cn=admin,dc=demo-corp,dc=local", "-w", "admin"]
       interval: 10s
       timeout: 5s
       retries: 12
+
+  openldap-bootstrap:
+    image: alpine:3.19
+    container_name: portal-auth-openldap-bootstrap
+    depends_on:
+      openldap:
+        condition: service_healthy
+    volumes:
+      # Mount ldap/ dir (not a single file) — Docker Desktop may create a directory if the file path was missing once.
+      - ./auth-test/ldap:/ldif:ro
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache openldap-clients >/dev/null
+        echo "Seeding demo users (idempotent with ldapadd -c)..."
+        ldapadd -c -x -H ldap://openldap:389 \
+          -D "cn=admin,dc=demo-corp,dc=local" -w admin -f /ldif/bootstrap.ldif || true
+        echo "LDAP bootstrap complete."
+    restart: "no"
 
   phpldapadmin:
     image: osixia/phpldapadmin:0.9.0
@@ -34,10 +54,13 @@ services:
       PHPLDAPADMIN_LDAP_HOSTS: openldap
       PHPLDAPADMIN_HTTPS: "false"
     ports:
-      - "8081:80"
+      # Default 18081 — host 8081 is often used by Superset/webpack dev servers.
+      - "${PHPLDAPADMIN_PORT:-18081}:80"
     depends_on:
       openldap:
         condition: service_healthy
+      openldap-bootstrap:
+        condition: service_completed_successfully
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0

@@ -20,6 +20,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AppShell } from '@/app/AppShell';
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
+import { AdminSettingsPage } from '@/pages/AdminSettingsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { HealthUiPage } from '@/pages/HealthUiPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
+      { path: 'admin/settings', element: <AdminSettingsPage /> },
       { path: 'health-ui', element: <HealthUiPage /> },
     ],
   },

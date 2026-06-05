@@ -16,13 +16,14 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { EyeInvisibleOutlined, EyeTwoTone } from '@ant-design/icons';
-import { Alert, Button, Checkbox, Form, Input, Typography } from 'antd';
-import { useState } from 'react';
+import { EyeInvisibleOutlined, EyeTwoTone, LoginOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
+import { Alert, Button, Checkbox, Divider, Form, Input, Typography } from 'antd';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { ApiError } from '@/api/auth';
+import { ApiError, fetchLoginOptions, ssoLoginUrl } from '@/api/auth';
 import { useAuth } from '@/features/auth/useAuth';
 
 import styles from './LoginPage.module.css';
@@ -42,13 +43,41 @@ export function LoginPage() {
   const [form] = Form.useForm<LoginFormValues>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tenantSlug = Form.useWatch('tenant_slug', form) ?? 'demo-corp';
+
+  const { data: loginOptions } = useQuery({
+    queryKey: ['auth', 'login-options', tenantSlug],
+    queryFn: () => fetchLoginOptions(tenantSlug.trim()),
+    enabled: tenantSlug.trim().length > 0,
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    const ssoError = searchParams.get('sso_error');
+    if (ssoError) {
+      setError(ssoError);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const from =
     (location.state as { from?: string } | null)?.from ?? '/dashboard';
 
+  const showSsoButton =
+    loginOptions?.sso_enabled && loginOptions.auth_mode === 'oidc';
+  const showLocalForm =
+    loginOptions?.show_local_login !== false || !loginOptions?.sso_enabled;
+  const ssoIsPrimary = loginOptions?.sso_primary === true;
+
   if (isAuthenticated) {
     return <Navigate to={from} replace />;
   }
+
+  const handleSsoLogin = () => {
+    const slug = form.getFieldValue('tenant_slug')?.trim() || 'demo-corp';
+    window.location.href = ssoLoginUrl(slug);
+  };
 
   const handleSubmit = async (values: LoginFormValues) => {
     setSubmitting(true);
@@ -123,47 +152,79 @@ export function LoginPage() {
               />
             </Form.Item>
 
-            <Form.Item
-              name="username"
-              label={t('auth.username')}
-              rules={[{ required: true, message: t('auth.usernameRequired') }]}
-            >
-              <Input
-                autoComplete="username"
-                aria-required
-                placeholder="admin@demo-corp"
-              />
-            </Form.Item>
+            {showSsoButton ? (
+              <Form.Item>
+                <Button
+                  type={ssoIsPrimary ? 'primary' : 'default'}
+                  block
+                  size="large"
+                  icon={<LoginOutlined />}
+                  onClick={handleSsoLogin}
+                >
+                  {t('auth.ssoButton')}
+                </Button>
+              </Form.Item>
+            ) : null}
 
-            <Form.Item
-              name="password"
-              label={t('auth.password')}
-              rules={[{ required: true, message: t('auth.passwordRequired') }]}
-            >
-              <Input.Password
-                autoComplete="current-password"
-                aria-required
-                iconRender={(visible) =>
-                  visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
-                }
-              />
-            </Form.Item>
+            {showSsoButton && showLocalForm ? (
+              <Divider plain>{t('auth.orLocalLogin')}</Divider>
+            ) : null}
 
-            <Form.Item name="remember" valuePropName="checked">
-              <Checkbox>{t('auth.rememberMe')}</Checkbox>
-            </Form.Item>
+            {showLocalForm ? (
+              <>
+                <Form.Item
+                  name="username"
+                  label={t('auth.username')}
+                  rules={[
+                    { required: true, message: t('auth.usernameRequired') },
+                  ]}
+                >
+                  <Input
+                    autoComplete="username"
+                    aria-required
+                    placeholder={
+                      loginOptions?.auth_mode === 'ldap'
+                        ? 'cntt.cv'
+                        : 'admin@demo-corp'
+                    }
+                  />
+                </Form.Item>
 
-            <Form.Item>
-              <Button
-                type="primary"
-                htmlType="submit"
-                block
-                loading={submitting}
-                size="large"
-              >
-                {t('auth.loginButton')}
-              </Button>
-            </Form.Item>
+                <Form.Item
+                  name="password"
+                  label={t('auth.password')}
+                  rules={[
+                    { required: true, message: t('auth.passwordRequired') },
+                  ]}
+                >
+                  <Input.Password
+                    autoComplete="current-password"
+                    aria-required
+                    iconRender={(visible) =>
+                      visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
+                    }
+                  />
+                </Form.Item>
+
+                <Form.Item name="remember" valuePropName="checked">
+                  <Checkbox>{t('auth.rememberMe')}</Checkbox>
+                </Form.Item>
+
+                <Form.Item>
+                  <Button
+                    type={ssoIsPrimary ? 'default' : 'primary'}
+                    htmlType="submit"
+                    block
+                    loading={submitting}
+                    size="large"
+                  >
+                    {loginOptions?.auth_mode === 'ldap'
+                      ? t('auth.ldapLoginButton')
+                      : t('auth.loginButton')}
+                  </Button>
+                </Form.Item>
+              </>
+            ) : null}
           </Form>
         </div>
       </section>

@@ -19,12 +19,16 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+
+if TYPE_CHECKING:
+    from app.models.user_auth import UserAuthIdentity
 
 
 class SystemRole(str, enum.Enum):
@@ -84,3 +88,6 @@ class User(Base):
     )
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="users")
+    auth_identities: Mapped[list["UserAuthIdentity"]] = relationship(
+        "UserAuthIdentity", back_populates="user"
+    )

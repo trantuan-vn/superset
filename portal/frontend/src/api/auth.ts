@@ -58,6 +58,16 @@ export interface LoginPayload {
   password: string;
 }
 
+export interface LoginOptions {
+  tenant_slug: string;
+  tenant_name: string;
+  sso_enabled: boolean;
+  auth_mode: 'local' | 'oidc' | 'saml' | 'ldap';
+  sso_primary: boolean;
+  show_local_login: boolean;
+  branding?: TenantBranding | null;
+}
+
 class ApiError extends Error {
   status: number;
 
@@ -105,6 +115,20 @@ export async function logout(): Promise<void> {
 
 export async function fetchMe(): Promise<MeResponse> {
   return apiFetch<MeResponse>('/auth/me');
+}
+
+export async function fetchLoginOptions(
+  tenantSlug: string,
+): Promise<LoginOptions> {
+  const params = new URLSearchParams({ tenant_slug: tenantSlug });
+  return apiFetch<LoginOptions>(`/auth/login-options?${params.toString()}`);
+}
+
+/** Full URL to start OIDC SSO (browser navigation). */
+export function ssoLoginUrl(tenantSlug: string): string {
+  const base = API_BASE || '';
+  const params = new URLSearchParams({ tenant_slug: tenantSlug });
+  return `${base}/auth/sso/login?${params.toString()}`;
 }
 
 export { ApiError };

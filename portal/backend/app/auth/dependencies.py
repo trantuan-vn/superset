@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.session import SESSION_COOKIE_NAME, SessionData, get_session
 from app.db import get_db
-from app.models.user import User, UserStatus
+from app.models.user import SystemRole, User, UserStatus
 
 
 def get_session_id(
@@ -71,5 +71,16 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant mismatch",
+        )
+    return user
+
+
+def require_tenant_admin(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if user.system_role != SystemRole.TENANT_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant administrator access required",
         )
     return user

@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     max_login_attempts: int = 5
     login_lockout_minutes: int = 30
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    portal_public_base_url: str = "http://localhost:8000"
+    ldap_bind_password: str = "admin"
+    oidc_client_secret: str = "portal-dev-secret-change-in-prod"
+    frontend_base_url: str = "http://localhost:3000"
 
 
 @lru_cache

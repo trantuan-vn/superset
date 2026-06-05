@@ -32,7 +32,7 @@ from app.auth.session import (
     increment_login_attempts,
 )
 from app.config import get_settings
-from app.models.tenant import Tenant, TenantSettings
+from app.models.tenant import AuthMode, Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
 
 
@@ -87,9 +87,27 @@ def login(
     password: str,
     ip_address: str | None = None,
 ) -> LoginResult:
-    """Authenticate a local user and create a Redis session."""
-    settings = get_settings()
+    """Authenticate a user and create a Redis session."""
     tenant = _get_tenant_by_slug(db, tenant_slug)
+    tenant_settings = db.get(TenantSettings, tenant.id)
+    if tenant_settings is None:
+        raise AuthError("Tenant settings not found", status_code=500)
+
+    if (
+        tenant_settings.sso_ldap_enabled
+        and tenant_settings.auth_mode == AuthMode.LDAP
+    ):
+        from app.auth.sso_service import ldap_login
+
+        return ldap_login(
+            db,
+            tenant_slug=tenant_slug,
+            username=username,
+            password=password,
+            ip_address=ip_address,
+        )
+
+    settings = get_settings()
     user = _get_user_in_tenant(db, tenant.id, username)
 
     if user is None:
@@ -157,9 +175,6 @@ def login(
     db.commit()
 
     session_id, ttl_seconds = create_session(user.id, tenant.id)
-    tenant_settings = db.get(TenantSettings, tenant.id)
-    if tenant_settings is None:
-        raise AuthError("Tenant settings not found", status_code=500)
 
     write_audit_log(
         db,

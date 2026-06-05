@@ -14,3 +14,19 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+"""SSO authentication adapters."""
+
+from app.auth.adapters.ldap import LdapAuthResult, authenticate_ldap
+from app.auth.adapters.oidc import (
+    build_authorization_url,
+    exchange_code_for_profile,
+    fetch_oidc_discovery,
+)
+
+__all__ = [
+    "LdapAuthResult",
+    "authenticate_ldap",
+    "build_authorization_url",
+    "exchange_code_for_profile",
+    "fetch_oidc_discovery",
+]

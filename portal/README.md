@@ -1,6 +1,6 @@
-# Portal Kết xuất — Phase 1
+# Portal Kết xuất — Phase 2
 
-Scaffold + **đăng nhập local**, session Redis, multi-tenant cho Portal quy trình kết xuất dữ liệu trên Apache Superset.
+Scaffold + **đăng nhập local/SSO**, session Redis, multi-tenant cho Portal quy trình kết xuất dữ liệu trên Apache Superset.
 
 Đặc tả đầy đủ: [`docs/portal/SPEC-PORTAL-v1.md`](../docs/portal/SPEC-PORTAL-v1.md)
 
@@ -19,7 +19,7 @@ Từ **root repo**:
 docker compose -f portal/docker/docker-compose.portal.yml up -d --build
 ```
 
-### 2. Đăng nhập demo
+### 2. Đăng nhập demo (local — SSO tắt mặc định)
 
 | Trường | Giá trị |
 |---|---|
@@ -27,13 +27,20 @@ docker compose -f portal/docker/docker-compose.portal.yml up -d --build
 | Email | `admin@demo-corp` / `cntt.cv@demo-corp` / `cntt.ld@demo-corp` |
 | Mật khẩu | `Pass123!` |
 
+Khi **bật LDAP lần đầu**, nhập **Mật khẩu Portal** trên form (vd. `Pass123!`) — user khớp mật khẩu được đẩy sang LDAP, `password_hash` xóa → chỉ còn LDAP. Admin đăng nhập: `admin` hoặc `admin@demo-corp` + cùng mật khẩu.
+
 Mở http://localhost:3000 → redirect `/login` → sau đăng nhập vào `/dashboard`.
+
+**Tenant admin:** `/admin/settings` — bật SSO, chọn LDAP hoặc OIDC, lưu cấu hình.
 
 ### 3. Kiểm tra API
 
 ```bash
 # Health
 curl -f http://localhost:8000/health
+
+# Login options (public)
+curl "http://localhost:8000/auth/login-options?tenant_slug=demo-corp"
 
 # Login (lưu cookie session)
 curl -c /tmp/portal.cookie -X POST http://localhost:8000/auth/login \
@@ -44,7 +51,39 @@ curl -c /tmp/portal.cookie -X POST http://localhost:8000/auth/login \
 curl -b /tmp/portal.cookie http://localhost:8000/auth/me
 ```
 
-### 4. Dừng stack
+### 4. Test stack LDAP / Keycloak (Gate 2)
+
+```bash
+docker compose -f portal/docker/docker-compose.auth-test.yml up -d
+```
+
+| Dịch vụ | URL / cổng |
+|---|---|
+| OpenLDAP | `ldap://localhost:1389` |
+| phpLDAPadmin | http://localhost:18081 |
+| Keycloak | http://localhost:8082 (admin / admin) |
+| Step CA | https://localhost:9443 |
+
+**Lưu ý Docker Desktop (macOS):** Không bind-mount trực tiếp file `bootstrap.ldif` vào image `osixia/openldap` — Docker có thể tạo **thư mục** cùng tên và OpenLDAP sẽ lỗi. Compose hiện dùng service `openldap-bootstrap` seed sau khi LDAP healthy.
+
+Nếu `portal-auth-openldap` đã lỗi trước đó, xóa volume/container cũ rồi chạy lại:
+
+```bash
+docker rm -f portal-auth-openldap portal-auth-openldap-bootstrap
+# Nếu bootstrap.ldif thành thư mục rỗng (do mount lỗi):
+rm -rf portal/docker/auth-test/ldap/bootstrap.ldif
+git checkout -- portal/docker/auth-test/ldap/bootstrap.ldif
+docker compose -f portal/docker/docker-compose.auth-test.yml up -d
+```
+
+**phpLDAPadmin:** http://localhost:18081 (đổi cổng: `PHPLDAPADMIN_PORT=8081 docker compose ... up -d` nếu 18081 bận).
+
+Cấu hình tenant qua UI **Cài đặt xác thực** hoặc PATCH `/tenants/{id}/settings`:
+
+- **T2 LDAP:** `auth_mode=ldap`, URI `ldap://host.docker.internal:1389`, bind DN/password, **Mật khẩu Portal** `Pass123!` khi lưu lần đầu → admin login `admin` / `Pass123!`
+- **T3 OIDC:** `auth_mode=oidc`, issuer `http://localhost:8082/realms/demo-corp`, client `portal`, secret trong `OIDC_CLIENT_SECRET`
+
+### 5. Dừng stack
 
 ```bash
 docker compose -f portal/docker/docker-compose.portal.yml down
@@ -57,8 +96,10 @@ docker compose -f portal/docker/docker-compose.portal.yml down
 | `DATABASE_URL` | `postgresql://portal:portal@localhost:5433/portal` | PostgreSQL Portal DB |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis session store |
 | `SESSION_TTL_HOURS` | `8` | Thời hạn session (giờ) |
-| `MAX_LOGIN_ATTEMPTS` | `5` | Khóa tài khoản sau N lần sai |
-| `SESSION_COOKIE_SECURE` | `false` | Bật `true` trên production HTTPS |
+| `PORTAL_PUBLIC_BASE_URL` | `http://localhost:8000` | Base URL API (OIDC callback) |
+| `FRONTEND_BASE_URL` | `http://localhost:3000` | Redirect sau SSO |
+| `LDAP_BIND_PASSWORD` | `admin` | Dev secret cho `secret/portal/ldap-bind` |
+| `OIDC_CLIENT_SECRET` | *(Keycloak dev)* | Dev secret cho OIDC client |
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Origins được phép gọi API |
 | `VITE_API_URL` | *(trống trong Docker)* | Base URL API cho frontend dev/build |
 
@@ -73,7 +114,6 @@ cd portal/backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp ../.env.example .env
-# Cần PostgreSQL + Redis (vd. chỉ portal-db, portal-redis từ compose)
 alembic upgrade head
 python -m app.seed
 uvicorn app.main:app --reload --port 8000
@@ -96,36 +136,15 @@ cd portal/backend
 pytest tests/
 ```
 
-### Lint frontend
+## Gate 2 — Checklist
 
-```bash
-cd portal/frontend
-npm run lint && npm run typecheck
-```
-
-## Cấu trúc thư mục
-
-```
-portal/
-├── backend/          # FastAPI + Alembic + Redis session
-├── frontend/         # React 18 + Vite + Ant Design 5
-├── docker/
-│   ├── Dockerfile
-│   ├── docker-compose.portal.yml
-│   └── docker-compose.auth-test.yml   # Phase 2–3 (LDAP/PKI test)
-└── k8s/helm/portal/  # Helm chart — Phase 12
-```
-
-## Gate 1 — Checklist
-
-- [ ] `POST /auth/login` + `GET /auth/me` + `POST /auth/logout` OK
-- [ ] Session cookie HttpOnly; tenant isolation (user chỉ thuộc 1 tenant)
-- [ ] Khóa tài khoản sau 5 lần đăng nhập sai
-- [ ] UI: trang login split layout, validation inline, loading state
-- [ ] UI: dashboard welcome + stats placeholder, menu theo `system_role`
-- [ ] UI: user menu đăng xuất, tenant badge trên header
-- [ ] Session hết hạn → redirect login + toast
+- [ ] `GET /auth/login-options` — SSO OFF ẩn nút; SSO ON + OIDC hiện **Đăng nhập SSO**
+- [ ] LDAP: bind OpenLDAP → session + audit `AUTH_SSO_LOGIN`
+- [ ] OIDC: Keycloak redirect → callback → session
+- [ ] `GET/PATCH /tenants/{id}/settings` — tenant_admin, secrets masked
+- [ ] Regression T1: local login khi SSO tắt
+- [ ] UI: `/admin/settings` form toggle + cấu hình
 
 ## Phase tiếp theo
 
-**Phase 2:** SSO/LDAP (feature flag) — xem §7 và §12 trong spec.
+**Phase 3:** Ký số PKI (feature flag) — xem §7 và §12.5 trong spec.

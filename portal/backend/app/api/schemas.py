@@ -58,6 +58,48 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class LoginOptionsResponse(BaseModel):
+    tenant_slug: str
+    tenant_name: str
+    sso_enabled: bool
+    auth_mode: str
+    sso_primary: bool
+    show_local_login: bool
+    branding: TenantBrandingResponse | None = None
+
+
+class TenantSettingsResponse(BaseModel):
+    tenant_id: str
+    sso_ldap_enabled: bool
+    auth_mode: str
+    ldap_migration_required: bool = False
+    sso_config: dict[str, Any] | None = None
+    digital_signature_enabled: bool
+    pki_config: dict[str, Any] | None = None
+    ai_enabled: bool
+    ai_config: dict[str, Any] | None = None
+    export_formats: list[str] | None = None
+    download_token_ttl_hours: int
+    branding: dict[str, Any] | None = None
+
+
+class TenantSettingsPatch(BaseModel):
+    sso_ldap_enabled: bool | None = None
+    auth_mode: str | None = None
+    sso_config: dict[str, Any] | None = None
+    digital_signature_enabled: bool | None = None
+    pki_config: dict[str, Any] | None = None
+    ai_enabled: bool | None = None
+    ai_config: dict[str, Any] | None = None
+    branding: dict[str, Any] | None = None
+    portal_password: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=256,
+        description="Current Portal password — used once to verify and push users into LDAP",
+    )
+
+
 def branding_from_json(raw: dict[str, Any] | None) -> TenantBrandingResponse | None:
     if not raw:
         return None

@@ -1,0 +1,197 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+"""Tenant settings management — Phase 2."""
+
+import copy
+import uuid
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.audit.service import write_audit_log
+from app.auth.secrets import mask_secret_value, resolve_secret_ref
+from app.auth.service import AuthError
+from app.models.tenant import AuthMode, TenantSettings
+from app.models.user import User
+from app.tenants.ldap_sync import sync_portal_users_to_ldap
+
+
+def count_local_password_users(db: Session, tenant_id: uuid.UUID) -> int:
+    """Portal users not yet migrated to LDAP (still have password_hash)."""
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(
+                User.tenant_id == tenant_id,
+                User.password_hash.isnot(None),
+            )
+        )
+        or 0
+    )
+
+
+def ldap_migration_required(db: Session, settings: TenantSettings) -> bool:
+    if not settings.sso_ldap_enabled or settings.auth_mode != AuthMode.LDAP:
+        return False
+    return count_local_password_users(db, settings.tenant_id) > 0
+
+_SECRET_KEYS = ("bind_password", "client_secret", "bind_password_ref", "client_secret_ref")
+
+
+def _mask_sso_config(config: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not config:
+        return None
+    masked = copy.deepcopy(config)
+    bind_ref = masked.get("bind_password_ref")
+    secret_ref = masked.get("client_secret_ref")
+    bind_plain = masked.get("bind_password")
+    secret_plain = masked.get("client_secret")
+
+    if bind_ref or bind_plain or resolve_secret_ref(str(bind_ref) if bind_ref else None):
+        masked["bind_password_set"] = True
+    if secret_ref or secret_plain or resolve_secret_ref(str(secret_ref) if secret_ref else None):
+        masked["client_secret_set"] = True
+
+    for key in ("bind_password", "client_secret"):
+        if key in masked:
+            masked[key] = mask_secret_value(str(masked[key])) or "********"
+
+    return masked
+
+
+def get_tenant_settings(db: Session, tenant_id: uuid.UUID) -> TenantSettings:
+    settings = db.get(TenantSettings, tenant_id)
+    if settings is None:
+        raise AuthError("Tenant settings not found", status_code=404)
+    return settings
+
+
+def settings_to_response(
+    settings: TenantSettings, *, db: Session | None = None
+) -> dict[str, Any]:
+    migration_required = (
+        ldap_migration_required(db, settings) if db is not None else False
+    )
+    return {
+        "tenant_id": str(settings.tenant_id),
+        "sso_ldap_enabled": settings.sso_ldap_enabled,
+        "auth_mode": settings.auth_mode.value,
+        "ldap_migration_required": migration_required,
+        "sso_config": _mask_sso_config(settings.sso_config),
+        "digital_signature_enabled": settings.digital_signature_enabled,
+        "pki_config": settings.pki_config,
+        "ai_enabled": settings.ai_enabled,
+        "ai_config": settings.ai_config,
+        "export_formats": settings.export_formats,
+        "download_token_ttl_hours": settings.download_token_ttl_hours,
+        "branding": settings.branding,
+    }
+
+
+def update_tenant_settings(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    actor: User,
+    patch: dict[str, Any],
+    ip_address: str | None = None,
+) -> TenantSettings:
+    """Patch tenant settings; merge sso_config without overwriting secrets."""
+    settings = get_tenant_settings(db, tenant_id)
+    portal_password = patch.pop("portal_password", None)
+
+    if "sso_ldap_enabled" in patch:
+        settings.sso_ldap_enabled = bool(patch["sso_ldap_enabled"])
+
+    if "auth_mode" in patch and patch["auth_mode"]:
+        settings.auth_mode = AuthMode(patch["auth_mode"])
+
+    if "digital_signature_enabled" in patch:
+        settings.digital_signature_enabled = bool(patch["digital_signature_enabled"])
+
+    if "ai_enabled" in patch:
+        settings.ai_enabled = bool(patch["ai_enabled"])
+
+    if "branding" in patch:
+        settings.branding = patch["branding"]
+
+    if "sso_config" in patch and patch["sso_config"] is not None:
+        incoming: dict[str, Any] = patch["sso_config"]
+        merged = copy.deepcopy(settings.sso_config or {})
+        for key, value in incoming.items():
+            if key in ("bind_password", "client_secret") and not value:
+                continue
+            if value is not None:
+                merged[key] = value
+        settings.sso_config = merged
+
+    if "pki_config" in patch:
+        settings.pki_config = patch["pki_config"]
+
+    if "ai_config" in patch:
+        settings.ai_config = patch["ai_config"]
+
+    will_be_ldap = settings.sso_ldap_enabled and settings.auth_mode == AuthMode.LDAP
+    needs_migration = will_be_ldap and count_local_password_users(db, tenant_id) > 0
+
+    if will_be_ldap and settings.sso_config:
+        if needs_migration and not portal_password:
+            raise AuthError(
+                "portal_password is required to migrate Portal users into LDAP. "
+                "Enter the current Portal password (e.g. your admin password).",
+                status_code=400,
+            )
+        if portal_password:
+            sync_result = sync_portal_users_to_ldap(
+                db,
+                tenant_id=tenant_id,
+                settings=settings,
+                portal_password=str(portal_password),
+            )
+            write_audit_log(
+                db,
+                tenant_id=tenant_id,
+                action="LDAP_PORTAL_USERS_SYNCED",
+                entity_type="tenant",
+                entity_id=str(tenant_id),
+                actor_id=actor.id,
+                payload={
+                    "synced": sync_result.synced_usernames,
+                    "skipped": sync_result.skipped_usernames,
+                },
+                ip_address=ip_address,
+            )
+
+    db.commit()
+    db.refresh(settings)
+
+    write_audit_log(
+        db,
+        tenant_id=tenant_id,
+        action="TENANT_SETTINGS_UPDATED",
+        entity_type="tenant_settings",
+        entity_id=str(tenant_id),
+        actor_id=actor.id,
+        payload={
+            "sso_ldap_enabled": settings.sso_ldap_enabled,
+            "auth_mode": settings.auth_mode.value,
+        },
+        ip_address=ip_address,
+    )
+    return settings

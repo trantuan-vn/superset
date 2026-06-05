@@ -1002,7 +1002,7 @@ Phục vụ **Phase 2 (Gate 2)** và **Phase 3 (Gate 3)** trên máy dev/staging
 | Service | Image | Tag khuyến nghị | Port host | Mục đích |
 |---|---|---|---|---|
 | **OpenLDAP** | `osixia/openldap` | `1.5.0` | `1389` (LDAP), `1636` (LDAPS) | LDAP bind trực tiếp (Phase 2) |
-| **phpLDAPadmin** | `osixia/phpldapadmin` | `0.9.0` | `8081` | UI quản trị LDAP, kiểm tra user/OU |
+| **phpLDAPadmin** | `osixia/phpldapadmin` | `0.9.0` | `18081` (hoặc `PHPLDAPADMIN_PORT`) | UI quản trị LDAP, kiểm tra user/OU |
 | **Keycloak** | `quay.io/keycloak/keycloak` | `24.0` | `8082` | OIDC IdP (Phase 2 — thay LDAP bind) |
 | **Step CA** | `smallstep/step-ca` | `latest` | `9443` | CA nội bộ — cấp cert test (Phase 3) |
 
@@ -1026,7 +1026,7 @@ docker compose -f portal/docker/docker-compose.auth-test.yml ps
 │       │              ──OIDC──────▶ keycloak:8080                │
 │       │              ──PKI verify─▶ step-ca:9443                │
 │       ▼                                                         │
-│  Browser ◀── phpLDAPadmin :8081 (admin LDAP)                    │
+│  Browser ◀── phpLDAPadmin :18081 (admin LDAP)                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

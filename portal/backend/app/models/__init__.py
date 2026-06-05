@@ -18,12 +18,15 @@
 from app.models.audit import AuditLog
 from app.models.tenant import Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
+from app.models.user_auth import AuthProvider, UserAuthIdentity
 
 __all__ = [
     "AuditLog",
+    "AuthProvider",
     "SystemRole",
     "Tenant",
     "TenantSettings",
     "User",
+    "UserAuthIdentity",
     "UserStatus",
 ]
