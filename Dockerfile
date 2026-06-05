@@ -269,6 +269,21 @@ RUN python -m compileall /app/superset
 USER superset
 
 ######################################################################
+# Production image with DB drivers (K8s / Helm)
+# Build: docker build --target prod --build-arg DEV_MODE=false -t REGISTRY/superset:TAG .
+######################################################################
+FROM lean AS prod
+USER root
+RUN . /app/.venv/bin/activate && \
+    uv pip install \
+    psycopg2-binary \
+    pymssql \
+    openpyxl \
+    Authlib
+USER superset
+CMD ["/app/docker/entrypoints/run-server.sh"]
+
+######################################################################
 # CI image...
 ######################################################################
 FROM lean AS ci

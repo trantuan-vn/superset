@@ -105,6 +105,9 @@ class CeleryConfig:
 
 CELERY_CONFIG = CeleryConfig
 
+# Required for webpack-dev-server (eval-source-map) under Talisman CSP in local Docker.
+DEBUG = True
+
 FEATURE_FLAGS = {
     "ALERT_REPORTS": True,
     "DATASET_FOLDERS": True,

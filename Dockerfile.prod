@@ -1,0 +1,70 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+######################################################################
+# Production image — extends the lean image built FROM THIS REPOSITORY
+#
+# ⚠️  BASE_IMAGE must be your local lean build, NOT apache/superset:latest
+#     (official images do not contain your superset-frontend changes).
+#
+# ── Option A: ONE command (recommended) ─────────────────────────────
+#   docker build --target prod \
+#     --build-arg DEV_MODE=false \
+#     -t docker.io/tuantahp/superset:1.0.0 .
+#
+# ── Option B: Two steps (customize drivers in this file) ────────────
+#   # 1) Lean base from local source
+#   docker build --target lean \
+#     --build-arg DEV_MODE=false \
+#     -t superset-base:local .
+#
+#   # 2) Add drivers (uses BASE_IMAGE below)
+#   docker build -f Dockerfile.prod \
+#     -t docker.io/tuantahp/superset:1.0.0 .
+#
+# ── Option C: Official release only (no local code changes) ───────────
+#   docker build -f Dockerfile.prod \
+#     --build-arg BASE_IMAGE=apache/superset:5.0.0 \
+#     -t docker.io/tuantahp/superset:1.0.0 .
+######################################################################
+
+# Default: lean image built from this repo (step 1 of Option B)
+ARG BASE_IMAGE=superset-base:local
+FROM ${BASE_IMAGE}
+
+USER root
+
+# Metadata DB (PostgreSQL). Use pymysql for MySQL metadata store.
+# Add or remove analytics DB drivers as needed.
+RUN . /app/.venv/bin/activate && \
+    uv pip install \
+    psycopg2-binary \
+    pymssql \
+    openpyxl \
+    Authlib
+
+# Optional: Alerts & Reports via Playwright (uncomment + enable feature flag in Helm).
+# ENV PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers
+# RUN . /app/.venv/bin/activate && \
+#     uv pip install playwright && \
+#     playwright install-deps && \
+#     PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/playwright-browsers \
+#     playwright install chromium
+
+USER superset
+
+CMD ["/app/docker/entrypoints/run-server.sh"]

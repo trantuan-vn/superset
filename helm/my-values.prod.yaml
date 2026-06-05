@@ -1,0 +1,174 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+######################################################################
+# Sample production Helm values for Apache Superset
+#
+# Replace placeholders marked CHANGE_ME before deploying.
+#
+# Deploy:
+#   helm repo add superset https://apache.github.io/superset
+#   helm repo update
+#   helm upgrade --install superset superset/superset \
+#     -f helm/my-values.prod.yaml \
+#     -n superset --create-namespace
+#
+# Generate SECRET_KEY:
+#   openssl rand -base64 42
+######################################################################
+
+# -------------------------------------------------------------------
+# Container image (your registry after docker push)
+# -------------------------------------------------------------------
+image:
+  repository: docker.io/tuantahp/superset
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# Uncomment if registry is private:
+# imagePullSecrets:
+#   - name: regcred
+
+# Run as non-root in production (image default user is superset)
+runAsUser: 1000
+
+# -------------------------------------------------------------------
+# Secrets — NEVER commit real values; use Sealed Secrets / ESO / CI vars
+# -------------------------------------------------------------------
+extraSecretEnv:
+  SUPERSET_SECRET_KEY: "CHANGE_ME_openssl_rand_base64_42"
+
+# -------------------------------------------------------------------
+# External PostgreSQL (managed DB — disable bundled subchart)
+# Example: AWS RDS, Cloud SQL, Azure Database for PostgreSQL
+# -------------------------------------------------------------------
+postgresql:
+  enabled: false
+
+# -------------------------------------------------------------------
+# External Redis (managed cache — disable bundled subchart)
+# Example: AWS ElastiCache, Google Memorystore, Azure Cache for Redis
+# -------------------------------------------------------------------
+redis:
+  enabled: false
+
+supersetNode:
+  replicas:
+    replicaCount: 2
+
+  connections:
+    db_type: postgresql
+    db_host: "CHANGE_ME-postgres.your-company.internal"
+    db_port: "5432"
+    db_user: superset
+    db_pass: "CHANGE_ME-db-password"
+    db_name: superset
+
+    redis_host: "CHANGE_ME-redis.your-company.internal"
+    redis_port: "6379"
+    redis_user: ""
+    # redis_password: "CHANGE_ME-redis-password"
+    redis_ssl:
+      enabled: false
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      memory: "2Gi"
+
+supersetWorker:
+  replicas:
+    replicaCount: 2
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      memory: "2Gi"
+
+# Celery beat — enable if using Alerts & Reports scheduled jobs
+supersetCeleryBeat:
+  enabled: true
+
+# WebSocket — enable if using GLOBAL_ASYNC_QUERIES with websocket transport
+supersetWebsockets:
+  enabled: false
+
+# -------------------------------------------------------------------
+# Init job (DB migration + admin user on first install)
+# -------------------------------------------------------------------
+init:
+  loadExamples: false
+  createAdmin: true
+  adminUser:
+    username: admin
+    firstname: Superset
+    lastname: Admin
+    email: admin@your-company.com
+    password: "CHANGE_ME-admin-password"
+
+# Drivers are baked into Dockerfile.prod — keep bootstrap minimal
+bootstrapScript: |
+  #!/bin/bash
+  if [ ! -f ~/bootstrap ]; then echo "Superset production bootstrap" > ~/bootstrap; fi
+
+# -------------------------------------------------------------------
+# Ingress
+# -------------------------------------------------------------------
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+  path: /
+  pathType: Prefix
+  hosts:
+    - superset.your-company.com
+  tls:
+    - secretName: superset-tls
+      hosts:
+        - superset.your-company.com
+
+# -------------------------------------------------------------------
+# superset_config.py overrides (injected as K8s Secret)
+# -------------------------------------------------------------------
+configOverrides:
+  secret: |
+    SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY")
+
+  proxy_fix: |
+    # Required behind Ingress / load balancer
+    ENABLE_PROXY_FIX = True
+    PREFERRED_URL_SCHEME = "https"
+
+  feature_flags: |
+    FEATURE_FLAGS = {
+        "ALERT_REPORTS": True,
+    }
+
+  # smtp: |
+  #   SMTP_HOST = os.getenv("SMTP_HOST", "smtp.your-company.com")
+  #   SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+  #   SMTP_STARTTLS = True
+  #   SMTP_SSL = False
+  #   SMTP_USER = os.getenv("SMTP_USER", "superset@your-company.com")
+  #   SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+  #   SMTP_MAIL_FROM = os.getenv("SMTP_MAIL_FROM", "superset@your-company.com")
