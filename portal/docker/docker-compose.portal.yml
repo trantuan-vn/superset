@@ -62,6 +62,7 @@ services:
       # Phase 5 — Superset provisioning (host Superset dev stack on port 8088)
       SUPERSET_INTERNAL_URL: http://host.docker.internal:8088
       SUPERSET_SERVICE_USERNAME: portal_provisioner
+      SUPERSET_RLS_DATASET_NAMES: portal_export_data
     ports:
       - "8000:8000"
     depends_on:

@@ -30,6 +30,7 @@ from app.db import Base
 class ProvisioningEntityType(str, enum.Enum):
     ROLE = "role"
     USER = "user"
+    RLS = "rls"
 
 
 class ProvisioningOperation(str, enum.Enum):

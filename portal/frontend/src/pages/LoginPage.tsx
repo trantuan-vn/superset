@@ -252,6 +252,7 @@ export function LoginPage() {
                     autoComplete="username"
                     aria-required
                     placeholder={
+                      loginOptions?.sso_enabled &&
                       loginOptions?.auth_mode === 'ldap'
                         ? 'cntt.cv'
                         : 'admin@demo-corp'
@@ -287,7 +288,8 @@ export function LoginPage() {
                     loading={submitting}
                     size="large"
                   >
-                    {loginOptions?.auth_mode === 'ldap'
+                    {loginOptions?.sso_enabled &&
+                    loginOptions?.auth_mode === 'ldap'
                       ? t('auth.ldapLoginButton')
                       : t('auth.loginButton')}
                   </Button>

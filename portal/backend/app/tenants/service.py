@@ -53,6 +53,21 @@ def count_local_password_users(db: Session, tenant_id: uuid.UUID) -> int:
     )
 
 
+def count_sso_only_users(db: Session, tenant_id: uuid.UUID) -> int:
+    """Portal users without a local password (LDAP/OIDC-only)."""
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(
+                User.tenant_id == tenant_id,
+                User.password_hash.is_(None),
+            )
+        )
+        or 0
+    )
+
+
 def ldap_migration_required(db: Session, settings: TenantSettings) -> bool:
     if not settings.sso_ldap_enabled or settings.auth_mode != AuthMode.LDAP:
         return False
@@ -124,10 +139,22 @@ def update_tenant_settings(
     portal_password = patch.pop("portal_password", None)
 
     if "sso_ldap_enabled" in patch:
-        settings.sso_ldap_enabled = bool(patch["sso_ldap_enabled"])
+        enabling_sso = bool(patch["sso_ldap_enabled"])
+        if not enabling_sso and settings.sso_ldap_enabled:
+            if count_sso_only_users(db, tenant_id) > 0:
+                raise AuthError(
+                    "Cannot disable SSO while users authenticate via LDAP/OIDC only. "
+                    "Keep SSO enabled or reset user passwords first.",
+                    status_code=400,
+                )
+            settings.auth_mode = AuthMode.LOCAL
+        settings.sso_ldap_enabled = enabling_sso
 
     if "auth_mode" in patch and patch["auth_mode"]:
-        settings.auth_mode = AuthMode(patch["auth_mode"])
+        if settings.sso_ldap_enabled:
+            settings.auth_mode = AuthMode(patch["auth_mode"])
+        else:
+            settings.auth_mode = AuthMode.LOCAL
 
     if "digital_signature_enabled" in patch:
         enabling = bool(patch["digital_signature_enabled"])

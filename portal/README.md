@@ -170,6 +170,55 @@ curl -b /tmp/portal.cookie -X POST http://localhost:8000/auth/pki/challenge
 - [ ] UI: progress `Đăng nhập → Xác thực chứng thư số → Hoàn tất`
 - [ ] Regression Gate 1–2 khi PKI **tắt**
 
+## Phase 6 — RLS Multi-tenant / Department
+
+**Mục tiêu:** Mỗi phòng ban chỉ thấy dữ liệu `tenant_id` + `dept_code` của mình trên Superset.
+
+### Superset config (đã bật trong `docker/pythonpath_dev/superset_config.py`)
+
+- `RLS_IN_SQLLAB = True` — SQL Lab áp dụng RLS cho `cntt_cv`
+- `ENABLE_TEMPLATE_PROCESSING = True` — macro Jinja trong RLS clause
+- `JINJA_CONTEXT_ADDONS`: `current_user_tenant()`, `current_user_dept()`
+
+Macro đọc scope từ username Portal (`t_{tenant}__{user}`) và tên role Superset (`t_{tenant}_d_{DEPT}_cv|ld`).
+
+**Chính sách `cntt_lanhdao` / `cntt_chuyenvien`:** RLS **theo tenant** (thấy mọi phòng ban trong doanh nghiệp) — rule `rls_t_{slug}_tenant` với clause `tenant_id = '{{ current_user_tenant() }}'`.
+
+### Chuẩn bị dataset demo
+
+Trong container Superset (sau stack dev chạy):
+
+```bash
+python portal/docker/scripts/setup_superset_rls_demo.py
+```
+
+Tạo bảng `portal_export_data` với cột `tenant_id`, `dept_code` và dữ liệu mẫu `demo-corp` / `KETOAN` / `CNTT`.
+
+### Portal auto-provision RLS
+
+Khi tạo phòng ban → Portal tạo rule `rls_t_{tenant}_d_{code}` gắn role `_cv` + `_ld`.
+
+Khi onboard tenant → rule `rls_t_{tenant}_tenant` cho `cntt_cv` + `cntt_ld`.
+
+Biến môi trường:
+
+| Biến | Mặc định | Mô tả |
+|---|---|---|
+| `SUPERSET_RLS_DATASET_NAMES` | `portal_export_data` | Dataset Superset (table_name) nhận RLS |
+
+### Gate 6 — Checklist
+
+- [ ] Macro Jinja: `current_user_tenant()` / `current_user_dept()` trong SQL dataset
+- [ ] Tạo dept `KETOAN` → rule RLS xuất hiện trong Superset Security → RLS
+- [ ] User dept A query `portal_export_data` → chỉ rows dept A
+- [ ] `cntt_ld` thấy all dept trong tenant (không filter `dept_code`)
+- [ ] SQL Lab (`cntt_cv`) có RLS khi `RLS_IN_SQLLAB` bật
+- [ ] Audit `RLS_CREATED` khi provision thành công
+
+```bash
+cd portal/backend && pytest tests/test_rls.py -q
+```
+
 ## Phase tiếp theo
 
-**Phase 4:** Phòng ban động + gán vai trò user — xem §7 trong spec.
+**Phase 7:** AI Orchestrator + MCP (feature flag) — xem §7 trong spec.

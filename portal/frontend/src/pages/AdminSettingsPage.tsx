@@ -16,6 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -185,7 +186,7 @@ export function AdminSettingsPage() {
 
     const patch: TenantSettingsPatch = {
       sso_ldap_enabled: values.sso_ldap_enabled,
-      auth_mode: values.auth_mode,
+      auth_mode: values.sso_ldap_enabled ? values.auth_mode : 'local',
       sso_config: values.sso_ldap_enabled ? ssoConfig : undefined,
       digital_signature_enabled: values.digital_signature_enabled,
       pki_config: values.digital_signature_enabled ? pkiConfig : undefined,
@@ -199,6 +200,12 @@ export function AdminSettingsPage() {
   const authMode = Form.useWatch('auth_mode', form) ?? initialValues.auth_mode;
   const ssoEnabled =
     Form.useWatch('sso_ldap_enabled', form) ?? initialValues.sso_ldap_enabled;
+
+  useEffect(() => {
+    if (!ssoEnabled && authMode !== 'local') {
+      form.setFieldValue('auth_mode', 'local');
+    }
+  }, [authMode, form, ssoEnabled]);
   const pkiEnabled =
     Form.useWatch('digital_signature_enabled', form) ??
     initialValues.digital_signature_enabled;

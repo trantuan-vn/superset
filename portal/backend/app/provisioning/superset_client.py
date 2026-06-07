@@ -29,6 +29,9 @@ from app.config import Settings, get_settings
 from app.provisioning.rison import encode_rison
 
 
+_PAGE_SIZE = 500
+
+
 class SupersetClientError(Exception):
     """Raised when Superset API returns an error or is unreachable."""
 
@@ -92,6 +95,66 @@ class SupersetClient:
                     json=json_payload,
                     params=params,
                 )
+        except httpx.HTTPError as exc:
+            raise SupersetClientError(f"Superset unreachable: {exc}") from exc
+
+        if response.status_code >= 400:
+            detail = response.text[:500]
+            raise SupersetClientError(
+                f"Superset API {method} {path} failed ({response.status_code}): {detail}",
+                status_code=response.status_code,
+            )
+
+        if not response.content:
+            return {}
+        data = response.json()
+        if isinstance(data, dict):
+            return data
+        return {"result": data}
+
+    def _request_with_csrf(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, Any] | None = None,
+        params: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Mutating requests that require CSRF (e.g. Row Level Security API)."""
+        url = f"{self._base_url}{path}"
+        try:
+            with httpx.Client(
+                timeout=self._settings.provisioning_http_timeout,
+                follow_redirects=True,
+            ) as client:
+                csrf_response = client.get(
+                    f"{self._base_url}/api/v1/security/csrf_token/",
+                    headers=self._headers(),
+                )
+                if csrf_response.status_code >= 400:
+                    detail = csrf_response.text[:500]
+                    raise SupersetClientError(
+                        f"Superset CSRF token fetch failed ({csrf_response.status_code}): {detail}",
+                        status_code=csrf_response.status_code,
+                    )
+                csrf_data = csrf_response.json()
+                csrf_token = csrf_data.get("result")
+                if not csrf_token:
+                    raise SupersetClientError("Superset CSRF token missing in response")
+
+                headers = {
+                    **self._headers(),
+                    "X-CSRF-Token": str(csrf_token),
+                }
+                response = client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    json=json_payload,
+                    params=params,
+                )
+        except SupersetClientError:
+            raise
         except httpx.HTTPError as exc:
             raise SupersetClientError(f"Superset unreachable: {exc}") from exc
 
@@ -258,6 +321,111 @@ class SupersetClient:
                 "roles": role_ids,
                 "active": active,
             },
+        )
+
+    def find_dataset_ids_by_names(self, dataset_names: list[str]) -> list[int]:
+        """Resolve Superset dataset IDs by table_name (best-effort)."""
+        if not dataset_names:
+            return []
+
+        found: list[int] = []
+        page = 0
+        remaining = {name.strip() for name in dataset_names if name.strip()}
+
+        while remaining:
+            query = encode_rison({"page": page, "page_size": _PAGE_SIZE})
+            data = self._request("GET", "/api/v1/dataset/", params={"q": query})
+            results = data.get("result") or []
+            if not results:
+                break
+
+            for item in results:
+                table_name = str(item.get("table_name") or "")
+                if table_name in remaining:
+                    found.append(int(item["id"]))
+                    remaining.discard(table_name)
+
+            total = int(data.get("count") or 0)
+            page += 1
+            if not results or page * len(results) >= total:
+                break
+
+        return found
+
+    def find_rls_rule_by_name(self, rule_name: str) -> int | None:
+        query = encode_rison(
+            {
+                "filters": [{"col": "name", "opr": "eq", "value": rule_name}],
+                "page": 0,
+                "page_size": 1,
+            }
+        )
+        data = self._request(
+            "GET",
+            "/api/v1/rowlevelsecurity/",
+            params={"q": query},
+        )
+        results = data.get("result") or []
+        for item in results:
+            if str(item.get("name")) == rule_name:
+                return int(item["id"])
+        return None
+
+    def create_rls_rule(
+        self,
+        *,
+        name: str,
+        clause: str,
+        filter_type: str,
+        table_ids: list[int],
+        role_ids: list[int],
+        description: str | None = None,
+    ) -> int:
+        payload: dict[str, Any] = {
+            "name": name,
+            "clause": clause,
+            "filter_type": filter_type,
+            "tables": table_ids,
+            "roles": role_ids,
+        }
+        if description:
+            payload["description"] = description
+        data = self._request_with_csrf("POST", "/api/v1/rowlevelsecurity/", json_payload=payload)
+        rule_id = data.get("id")
+        if rule_id is None:
+            raise SupersetClientError(f"Unexpected RLS create response: {data}")
+        return int(rule_id)
+
+    def update_rls_rule(
+        self,
+        rule_id: int,
+        *,
+        clause: str,
+        filter_type: str,
+        table_ids: list[int],
+        role_ids: list[int],
+        description: str | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "clause": clause,
+            "filter_type": filter_type,
+            "tables": table_ids,
+            "roles": role_ids,
+        }
+        if description is not None:
+            payload["description"] = description
+        self._request_with_csrf(
+            "PUT",
+            f"/api/v1/rowlevelsecurity/{rule_id}",
+            json_payload=payload,
+        )
+
+    def delete_rls_rule(self, rule_id: int) -> None:
+        query = encode_rison([rule_id])
+        self._request_with_csrf(
+            "DELETE",
+            "/api/v1/rowlevelsecurity/",
+            params={"q": query},
         )
 
 

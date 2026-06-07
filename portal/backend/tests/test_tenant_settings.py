@@ -17,16 +17,18 @@
 """Tenant settings API tests — Phase 2."""
 
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.auth.dependencies import require_tenant_admin
+from app.auth.service import AuthError
 from app.main import app
 from app.models.tenant import AuthMode, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
 from app.seed import DEMO_TENANT_ID
-from app.tenants.service import settings_to_response
+from app.tenants.service import count_sso_only_users, settings_to_response, update_tenant_settings
 
 client = TestClient(app)
 
@@ -97,3 +99,55 @@ def test_patch_settings_as_admin() -> None:
         assert response.json()["auth_mode"] == "ldap"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_disable_sso_blocked_when_sso_only_users() -> None:
+    admin = _admin()
+    settings = TenantSettings(
+        tenant_id=DEMO_TENANT_ID,
+        sso_ldap_enabled=True,
+        auth_mode=AuthMode.LDAP,
+    )
+    db = MagicMock()
+
+    with (
+        patch("app.tenants.service.get_tenant_settings", return_value=settings),
+        patch(
+            "app.tenants.service.count_sso_only_users",
+            return_value=3,
+        ),
+        pytest.raises(AuthError) as exc_info,
+    ):
+        update_tenant_settings(
+            db,
+            tenant_id=DEMO_TENANT_ID,
+            actor=admin,
+            patch={"sso_ldap_enabled": False},
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "Cannot disable SSO" in str(exc_info.value)
+
+
+def test_disable_sso_resets_auth_mode_to_local() -> None:
+    admin = _admin()
+    settings = TenantSettings(
+        tenant_id=DEMO_TENANT_ID,
+        sso_ldap_enabled=True,
+        auth_mode=AuthMode.LDAP,
+    )
+    db = MagicMock()
+
+    with (
+        patch("app.tenants.service.get_tenant_settings", return_value=settings),
+        patch("app.tenants.service.count_sso_only_users", return_value=0),
+    ):
+        update_tenant_settings(
+            db,
+            tenant_id=DEMO_TENANT_ID,
+            actor=admin,
+            patch={"sso_ldap_enabled": False},
+        )
+
+    assert settings.sso_ldap_enabled is False
+    assert settings.auth_mode == AuthMode.LOCAL

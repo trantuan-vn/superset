@@ -36,11 +36,16 @@ from app.models.provisioning_sync_log import (
 )
 from app.models.tenant import Tenant
 from app.models.user import SystemRole, User, UserStatus
+from app.audit.service import write_audit_log
 from app.provisioning.blueprint import (
     RoleBlueprint,
     active_role_name,
     base_roles_for_blueprint,
     blueprint_for_role_name,
+    cntt_cv_role_name,
+    cntt_ld_role_name,
+    dept_cv_role_name,
+    dept_ld_role_name,
     dept_role_names,
     inactive_role_name,
     is_export_permission,
@@ -48,6 +53,13 @@ from app.provisioning.blueprint import (
     superset_role_names_for_user,
     superset_username,
     tenant_cntt_role_names,
+)
+from app.provisioning.rls import (
+    RLS_FILTER_TYPE_REGULAR,
+    dept_rls_clause,
+    dept_rls_rule_name,
+    tenant_rls_clause,
+    tenant_rls_rule_name,
 )
 from app.provisioning.superset_client import (
     SupersetClient,
@@ -103,6 +115,7 @@ class ProvisioningService:
                     operation=ProvisioningOperation.CREATE,
                 )
             )
+        results.append(self.provision_tenant_rls(tenant_slug, tenant_id))
         return results
 
     def provision_department_roles(
@@ -125,6 +138,7 @@ class ProvisioningService:
                     operation=ProvisioningOperation.CREATE,
                 )
             )
+        results.append(self.provision_department_rls(tenant_slug, tenant_id, dept_code))
         return results
 
     def deactivate_department_roles(
@@ -142,6 +156,9 @@ class ProvisioningService:
                     role_name=role_name,
                 )
             )
+        results.append(
+            self.deactivate_department_rls(tenant_slug, tenant_id, dept_code)
+        )
         return results
 
     def reactivate_department_roles(
@@ -164,6 +181,9 @@ class ProvisioningService:
                     operation=ProvisioningOperation.UPDATE,
                 )
             )
+        results.append(
+            self.provision_department_rls(tenant_slug, tenant_id, dept_code)
+        )
         results.extend(
             self._resync_department_users(tenant_slug, tenant_id, dept_code)
         )
@@ -307,7 +327,84 @@ class ProvisioningService:
                 user_id = uuid.UUID(entry.entity_key)
                 self.sync_user_by_id(user_id)
                 retried += 1
+            elif entry.entity_type == ProvisioningEntityType.RLS:
+                self._retry_rls_log(entry)
+                retried += 1
         return retried
+
+    def provision_tenant_rls(
+        self,
+        tenant_slug: str,
+        tenant_id: uuid.UUID,
+    ) -> ProvisioningResult:
+        """Create tenant-wide RLS for CNTT CV/LD roles (all depts in tenant)."""
+        rule_name = tenant_rls_rule_name(tenant_slug)
+        role_names = [cntt_cv_role_name(tenant_slug), cntt_ld_role_name(tenant_slug)]
+        return self._provision_rls_rule(
+            tenant_id=tenant_id,
+            rule_name=rule_name,
+            clause=tenant_rls_clause(),
+            role_names=role_names,
+            description=(
+                "Portal Phase 6 — CNTT roles see all departments within tenant"
+            ),
+            operation=ProvisioningOperation.CREATE,
+            audit_payload={"scope": "tenant", "tenant_slug": tenant_slug},
+        )
+
+    def provision_department_rls(
+        self,
+        tenant_slug: str,
+        tenant_id: uuid.UUID,
+        dept_code: str,
+    ) -> ProvisioningResult:
+        """Create dept-scoped RLS for CV/LD roles when a department is created."""
+        rule_name = dept_rls_rule_name(tenant_slug, dept_code)
+        role_names = [
+            dept_cv_role_name(tenant_slug, dept_code),
+            dept_ld_role_name(tenant_slug, dept_code),
+        ]
+        return self._provision_rls_rule(
+            tenant_id=tenant_id,
+            rule_name=rule_name,
+            clause=dept_rls_clause(),
+            role_names=role_names,
+            description=f"Portal Phase 6 — isolate department {dept_code}",
+            operation=ProvisioningOperation.CREATE,
+            audit_payload={
+                "scope": "department",
+                "tenant_slug": tenant_slug,
+                "dept_code": dept_code,
+            },
+        )
+
+    def deactivate_department_rls(
+        self,
+        tenant_slug: str,
+        tenant_id: uuid.UUID,
+        dept_code: str,
+    ) -> ProvisioningResult:
+        """Remove dept RLS rule when a department is deactivated."""
+        rule_name = dept_rls_rule_name(tenant_slug, dept_code)
+        log = self._get_or_create_log(
+            tenant_id=tenant_id,
+            entity_type=ProvisioningEntityType.RLS,
+            entity_key=rule_name,
+            operation=ProvisioningOperation.DEACTIVATE,
+        )
+
+        if not self.enabled:
+            return self._mark_skipped(log, "Superset provisioning not configured")
+
+        log.attempts += 1
+        try:
+            rule_id = self._client.find_rls_rule_by_name(rule_name)
+            if rule_id is None:
+                return self._mark_success(log, None, message="RLS rule not found")
+            self._client.delete_rls_rule(rule_id)
+            return self._mark_success(log, rule_id, message="RLS rule removed")
+        except SupersetClientError as exc:
+            return self._mark_failure(log, str(exc))
 
     def department_provisioning_summary(
         self,
@@ -382,6 +479,114 @@ class ProvisioningService:
             stmt = stmt.where(ProvisioningSyncLog.entity_key == entity_key)
         stmt = stmt.order_by(ProvisioningSyncLog.updated_at.desc()).limit(limit)
         return list(self._db.scalars(stmt).all())
+
+    def _rls_dataset_ids(self) -> list[int]:
+        names = [
+            name.strip()
+            for name in self._settings.superset_rls_dataset_names.split(",")
+            if name.strip()
+        ]
+        if not names:
+            return []
+        return self._client.find_dataset_ids_by_names(names)
+
+    def _provision_rls_rule(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        rule_name: str,
+        clause: str,
+        role_names: list[str],
+        description: str,
+        operation: ProvisioningOperation,
+        audit_payload: dict[str, str],
+        existing_log: ProvisioningSyncLog | None = None,
+    ) -> ProvisioningResult:
+        log = existing_log or self._get_or_create_log(
+            tenant_id=tenant_id,
+            entity_type=ProvisioningEntityType.RLS,
+            entity_key=rule_name,
+            operation=operation,
+        )
+
+        if not self.enabled:
+            return self._mark_skipped(log, "Superset provisioning not configured")
+
+        table_ids = self._rls_dataset_ids()
+        if not table_ids:
+            return self._mark_skipped(
+                log,
+                "No Superset datasets configured for RLS "
+                f"({self._settings.superset_rls_dataset_names})",
+            )
+
+        log.attempts += 1
+        try:
+            role_ids: list[int] = []
+            for role_name in role_names:
+                role = self._ensure_active_role(role_name)
+                if role is None:
+                    raise SupersetClientError(
+                        f"Required Superset role '{role_name}' does not exist"
+                    )
+                role_ids.append(role.id)
+
+            existing_rule_id = self._client.find_rls_rule_by_name(rule_name)
+            if existing_rule_id is None:
+                rule_id = self._client.create_rls_rule(
+                    name=rule_name,
+                    clause=clause,
+                    filter_type=RLS_FILTER_TYPE_REGULAR,
+                    table_ids=table_ids,
+                    role_ids=role_ids,
+                    description=description,
+                )
+            else:
+                self._client.update_rls_rule(
+                    existing_rule_id,
+                    clause=clause,
+                    filter_type=RLS_FILTER_TYPE_REGULAR,
+                    table_ids=table_ids,
+                    role_ids=role_ids,
+                    description=description,
+                )
+                rule_id = existing_rule_id
+
+            if log.attempts == 1 and operation == ProvisioningOperation.CREATE:
+                write_audit_log(
+                    self._db,
+                    tenant_id=tenant_id,
+                    action="RLS_CREATED",
+                    entity_type="rls_rule",
+                    entity_id=rule_name,
+                    payload={**audit_payload, "superset_id": rule_id},
+                )
+
+            return self._mark_success(log, rule_id)
+        except SupersetClientError as exc:
+            return self._mark_failure(log, str(exc))
+
+    def _retry_rls_log(self, entry: ProvisioningSyncLog) -> None:
+        if entry.operation == ProvisioningOperation.DEACTIVATE:
+            parts = entry.entity_key.rsplit("_d_", 1)
+            if len(parts) != 2 or not parts[1]:
+                return
+            tenant_slug = parts[0].removeprefix("rls_t_")
+            dept_code = parts[1]
+            self.deactivate_department_rls(tenant_slug, entry.tenant_id, dept_code)
+            return
+
+        if entry.entity_key.endswith("_tenant"):
+            tenant_slug = entry.entity_key.removeprefix("rls_t_").removesuffix("_tenant")
+            self.provision_tenant_rls(tenant_slug, entry.tenant_id)
+            return
+
+        prefix = "rls_t_"
+        if not entry.entity_key.startswith(prefix) or "_d_" not in entry.entity_key:
+            return
+        body = entry.entity_key[len(prefix) :]
+        tenant_slug, dept_code = body.rsplit("_d_", 1)
+        self.provision_department_rls(tenant_slug, entry.tenant_id, dept_code)
 
     def _provision_role(
         self,
@@ -578,7 +783,7 @@ class ProvisioningService:
             return self._mark_failure(log, str(exc))
 
     def _resolve_blueprint_permission_ids(self, blueprint: RoleBlueprint) -> list[int]:
-        permission_map = self._load_permission_names()
+        permission_map = self._load_permission_labels()
         merged: set[int] = set()
 
         for base_role_name in base_roles_for_blueprint(blueprint):
@@ -587,28 +792,65 @@ class ProvisioningService:
                 logger.warning("Base Superset role '%s' not found", base_role_name)
                 continue
             for perm_id in base_role.permission_ids:
-                perm_name = permission_map.get(perm_id, "")
-                if perm_name and not is_export_permission(perm_name):
-                    merged.add(perm_id)
+                label = permission_map.get(perm_id, "")
+                perm_name = label.split(" on ", 1)[0] if label else ""
+                if perm_name and is_export_permission(perm_name):
+                    continue
+                merged.add(perm_id)
 
+        merged.update(self._dataset_access_permission_ids(permission_map))
         return sorted(merged)
 
-    def _load_permission_names(self) -> dict[int, str]:
+    def _dataset_access_permission_ids(
+        self, permission_map: dict[int, str]
+    ) -> set[int]:
+        """Grant database/schema/datasource access for Portal RLS datasets."""
+        dataset_names = [
+            name.strip()
+            for name in self._settings.superset_rls_dataset_names.split(",")
+            if name.strip()
+        ]
+        if not dataset_names:
+            return set()
+
+        matched: set[int] = set()
+        for perm_id, label in permission_map.items():
+            if " on " not in label:
+                continue
+            perm_name, view_name = label.split(" on ", 1)
+            if perm_name == "database_access" and "[examples]" in view_name:
+                matched.add(perm_id)
+                continue
+            if perm_name == "schema_access" and "[examples]" in view_name and "public" in view_name:
+                matched.add(perm_id)
+                continue
+            if perm_name == "datasource_access":
+                for dataset_name in dataset_names:
+                    if f"[{dataset_name}]" in view_name or f".{dataset_name}]" in view_name:
+                        matched.add(perm_id)
+                        break
+        return matched
+
+    def _load_permission_labels(self) -> dict[int, str]:
         if self._permission_name_cache is not None:
             return self._permission_name_cache
 
         mapping: dict[int, str] = {}
         page = 0
+        total = 0
         while True:
             results, total = self._client.list_permissions_page(page, PAGE_SIZE)
             if not results:
                 break
             for item in results:
                 perm = item.get("permission") or {}
-                mapping[int(item["id"])] = str(perm.get("name") or "")
-            if len(mapping) >= total or len(results) < PAGE_SIZE:
-                break
+                view = item.get("view_menu") or {}
+                perm_name = str(perm.get("name") or "")
+                view_name = str(view.get("name") or "")
+                mapping[int(item["id"])] = f"{perm_name} on {view_name}"
             page += 1
+            if page * len(results) >= total:
+                break
 
         self._permission_name_cache = mapping
         return mapping

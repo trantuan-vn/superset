@@ -117,6 +117,19 @@ FEATURE_FLAGS = {
     "DASHBOARD_RBAC": True,
     "GRANULAR_EXPORT_PERMISSIONS": True,
     "FAB_API_KEY_ENABLED": True,
+    # Portal Phase 6 — multi-tenant / department RLS
+    "RLS_IN_SQLLAB": True,
+    "ENABLE_TEMPLATE_PROCESSING": True,
+}
+
+from superset.portal_rls.jinja_macros import (  # noqa: E402
+    current_user_dept,
+    current_user_tenant,
+)
+
+JINJA_CONTEXT_ADDONS = {
+    "current_user_tenant": current_user_tenant,
+    "current_user_dept": current_user_dept,
 }
 
 # Portal provisioning service account (API key auth)

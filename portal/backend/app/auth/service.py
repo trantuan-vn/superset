@@ -144,6 +144,12 @@ def login(
         raise AuthError("Account is inactive", status_code=403)
 
     if not verify_password(password, user.password_hash):
+        if user.password_hash is None and tenant_settings.auth_mode == AuthMode.LDAP:
+            raise AuthError(
+                "This account uses LDAP sign-in. Enable SSO in tenant settings "
+                "or contact your administrator.",
+                status_code=401,
+            )
         attempts = increment_login_attempts(tenant_slug, username)
         if attempts >= settings.max_login_attempts:
             user.status = UserStatus.LOCKED

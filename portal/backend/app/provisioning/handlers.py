@@ -147,9 +147,11 @@ def bootstrap_existing_tenants() -> None:
             select(Tenant).where(Tenant.slug != "platform")
         ).all()
         for tenant in tenants:
+            slug = tenant.slug
             try:
                 service.reconcile_tenant(tenant.id)
             except Exception:
-                logger.exception("Bootstrap provisioning failed for %s", tenant.slug)
+                db.rollback()
+                logger.exception("Bootstrap provisioning failed for %s", slug)
     finally:
         db.close()

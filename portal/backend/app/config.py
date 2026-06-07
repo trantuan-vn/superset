@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     provisioning_max_retries: int = 5
     provisioning_retry_delay_seconds: int = 60
     provisioning_http_timeout: float = 30.0
+    # Phase 6 — comma-separated Superset dataset names for RLS attachment
+    superset_rls_dataset_names: str = "portal_export_data"
 
 
 @lru_cache

@@ -101,6 +101,57 @@ def test_rison_encode_role_filter() -> None:
     assert "filters" in encoded
 
 
+def test_resolve_blueprint_keeps_unknown_and_skips_export_only() -> None:
+    db = MagicMock()
+    settings = Settings(superset_service_api_key="sst_test_key")
+    mock_client = MagicMock()
+    mock_client.enabled = True
+    mock_client.find_role_by_name.return_value = SupersetRole(
+        id=1,
+        name="Alpha",
+        permission_ids=(1, 2, 3),
+        user_ids=(),
+    )
+
+    service = ProvisioningService(db, client=mock_client, settings=settings)
+    service._load_permission_labels = MagicMock(  # type: ignore[method-assign]
+        return_value={
+            1: "can_read on Dataset",
+            2: "can_export on Chart",
+            # id 3 intentionally missing from map
+        }
+    )
+    service._dataset_access_permission_ids = MagicMock(return_value=set())  # type: ignore[method-assign]
+
+    from app.provisioning.blueprint import RoleBlueprint
+
+    ids = service._resolve_blueprint_permission_ids(RoleBlueprint.CNTT_CV)
+    assert 1 in ids
+    assert 2 not in ids
+    assert 3 in ids
+
+
+def test_load_permission_labels_paginates_past_first_page() -> None:
+    db = MagicMock()
+    settings = Settings(superset_service_api_key="sst_test_key")
+    mock_client = MagicMock()
+    mock_client.enabled = True
+
+    page_a = [{"id": 1, "permission": {"name": "can_read"}, "view_menu": {"name": "Dataset"}}]
+    page_b = [{"id": 2, "permission": {"name": "menu_access"}, "view_menu": {"name": "Datasets"}}]
+    mock_client.list_permissions_page.side_effect = [
+        (page_a, 2),
+        (page_b, 2),
+    ]
+
+    service = ProvisioningService(db, client=mock_client, settings=settings)
+    labels = service._load_permission_labels()
+
+    assert labels[1] == "can_read on Dataset"
+    assert labels[2] == "menu_access on Datasets"
+    assert mock_client.list_permissions_page.call_count == 2
+
+
 def test_provision_role_skipped_when_disabled() -> None:
     db = MagicMock()
     settings = Settings(superset_service_api_key="")
@@ -108,7 +159,7 @@ def test_provision_role_skipped_when_disabled() -> None:
 
     result = service.provision_department_roles("demo-corp", DEMO_TENANT_ID, "KETOAN")
 
-    assert len(result) == 2
+    assert len(result) == 3  # dept CV + LD roles + RLS rule
     assert all(r.status == ProvisioningSyncStatus.SKIPPED for r in result)
 
 
