@@ -42,6 +42,11 @@ services:
       dockerfile: docker/Dockerfile
       target: backend
     container_name: portal-api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - path: ../backend/.env
+        required: false
     environment:
       DATABASE_URL: postgresql://portal:portal@portal-db:5432/portal
       REDIS_URL: redis://portal-redis:6379/0
@@ -54,6 +59,9 @@ services:
       OIDC_CLIENT_SECRET: portal-dev-secret-change-in-prod
       # Phase 3 PKI — Step CA root (auth-test stack). Run step-ca-bootstrap first.
       PKI_ROOT_CA_PATH: /etc/ssl/portal-ca/root_ca.crt
+      # Phase 5 — Superset provisioning (host Superset dev stack on port 8088)
+      SUPERSET_INTERNAL_URL: http://host.docker.internal:8088
+      SUPERSET_SERVICE_USERNAME: portal_provisioner
     ports:
       - "8000:8000"
     depends_on:

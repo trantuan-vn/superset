@@ -29,6 +29,7 @@ from app.auth.password import hash_password
 from app.auth.service import AuthError
 from app.models.tenant import Tenant, TenantSettings, TenantStatus
 from app.models.user import SystemRole, User, UserStatus
+from app.provisioning.events import TenantCreated, emit_tenant_created
 
 
 @dataclass
@@ -133,6 +134,7 @@ def create_tenant_with_admin(
         payload={"slug": tenant.slug, "admin_email": email},
         ip_address=ip_address,
     )
+    emit_tenant_created(TenantCreated(tenant=tenant))
     return CreateTenantResult(tenant=tenant, admin_user=admin)
 
 

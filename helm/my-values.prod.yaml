@@ -162,7 +162,13 @@ configOverrides:
   feature_flags: |
     FEATURE_FLAGS = {
         "ALERT_REPORTS": True,
+        "DASHBOARD_RBAC": True,
+        "GRANULAR_EXPORT_PERMISSIONS": True,
     }
+
+  portal_provisioning: |
+    # Portal Phase 5 — API key auth for provisioning service account
+    FAB_API_KEY_ENABLED = True
 
   # smtp: |
   #   SMTP_HOST = os.getenv("SMTP_HOST", "smtp.your-company.com")

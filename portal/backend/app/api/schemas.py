@@ -169,12 +169,36 @@ class TenantSettingsPatch(BaseModel):
     )
 
 
+class ProvisioningSummaryResponse(BaseModel):
+    status: str
+    message: str | None = None
+
+
 class DepartmentResponse(BaseModel):
     id: str
     tenant_id: str
     code: str
     name: str
     status: str
+    provisioning: ProvisioningSummaryResponse | None = None
+
+
+class ProvisioningLogResponse(BaseModel):
+    id: str
+    entity_type: str
+    entity_key: str
+    operation: str
+    superset_id: int | None = None
+    status: str
+    error_message: str | None = None
+    attempts: int
+    updated_at: str
+
+
+class ProvisioningStatusResponse(BaseModel):
+    enabled: bool
+    superset_reachable: bool
+    logs: list[ProvisioningLogResponse] = Field(default_factory=list)
 
 
 class CreateDepartmentRequest(BaseModel):

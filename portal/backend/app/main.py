@@ -16,6 +16,8 @@
 # under the License.
 """Portal FastAPI application entry point."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,16 +28,27 @@ from app.api.pki import router as pki_router
 from app.api.sso import router as sso_router
 from app.api.platform import router as platform_router
 from app.api.tenants import router as tenants_router
+from app.api.provisioning import router as provisioning_router
 from app.api.users import router as users_router
 from app.config import get_settings
+from app.provisioning.handlers import bootstrap_existing_tenants, register_provisioning_handlers
 
 settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    register_provisioning_handlers()
+    bootstrap_existing_tenants()
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
@@ -55,3 +68,4 @@ app.include_router(tenants_router)
 app.include_router(platform_router)
 app.include_router(departments_router)
 app.include_router(users_router)
+app.include_router(provisioning_router)

@@ -15,3 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """Superset provisioning — Phase 5+."""
+
+from app.provisioning.service import ProvisioningService
+
+__all__ = ["ProvisioningService"]

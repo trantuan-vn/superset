@@ -71,8 +71,21 @@ export function AdminDepartmentsPage() {
 
   const createMutation = useMutation({
     mutationFn: createDepartment,
-    onSuccess: () => {
+    onSuccess: (dept) => {
       message.success(t('adminDepartments.created'));
+      const provisioning = dept.provisioning;
+      if (provisioning?.status === 'success') {
+        message.success(t('adminDepartments.provisioningSuccess'));
+      } else if (
+        provisioning?.status === 'failed' ||
+        provisioning?.status === 'dead_letter'
+      ) {
+        message.warning(
+          provisioning.message ?? t('adminDepartments.provisioningFailed'),
+        );
+      } else if (provisioning?.status === 'pending') {
+        message.info(t('adminDepartments.provisioningPending'));
+      }
       setDrawerOpen(false);
       form.resetFields();
       void queryClient.invalidateQueries({ queryKey: DEPARTMENTS_KEY });

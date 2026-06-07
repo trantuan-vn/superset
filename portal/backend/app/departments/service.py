@@ -27,6 +27,13 @@ from app.audit.service import write_audit_log
 from app.auth.password import hash_password
 from app.auth.policy import can_assign_system_role, can_modify_user
 from app.departments.events import DepartmentCreated, emit_department_created
+from app.provisioning.events import (
+    DepartmentDeactivated,
+    DepartmentReactivated,
+    emit_department_deactivated,
+    emit_department_reactivated,
+    request_user_provision,
+)
 from app.models.department import Department, DepartmentStatus, DeptRole, UserDeptRole
 from app.models.tenant import Tenant
 from app.models.user import SystemRole, User, UserStatus
@@ -160,6 +167,7 @@ def update_department(
     ip_address: str | None = None,
 ) -> Department:
     dept = get_department(db, tenant_id, department_id)
+    previous_status = dept.status
     changes: dict[str, str] = {}
 
     if name is not None:
@@ -177,10 +185,29 @@ def update_department(
     if not changes:
         return dept
 
+    tenant = db.get(Tenant, tenant_id)
     db.commit()
     db.refresh(dept)
 
-    action = "DEPT_DEACTIVATED" if status == DepartmentStatus.INACTIVE else "DEPT_UPDATED"
+    if tenant is not None:
+        if dept.status == DepartmentStatus.INACTIVE:
+            emit_department_deactivated(
+                DepartmentDeactivated(department=dept, tenant_slug=tenant.slug)
+            )
+        elif (
+            previous_status == DepartmentStatus.INACTIVE
+            and dept.status == DepartmentStatus.ACTIVE
+        ):
+            emit_department_reactivated(
+                DepartmentReactivated(department=dept, tenant_slug=tenant.slug)
+            )
+
+    if dept.status == DepartmentStatus.INACTIVE:
+        action = "DEPT_DEACTIVATED"
+    elif previous_status == DepartmentStatus.INACTIVE and dept.status == DepartmentStatus.ACTIVE:
+        action = "DEPT_REACTIVATED"
+    else:
+        action = "DEPT_UPDATED"
     write_audit_log(
         db,
         tenant_id=tenant_id,
@@ -309,7 +336,11 @@ def create_user(
         payload={"username": user.username, "system_role": user.system_role.value},
         ip_address=ip_address,
     )
-    return get_user_in_tenant(db, tenant_id, user.id)
+    created = get_user_in_tenant(db, tenant_id, user.id)
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is not None:
+        request_user_provision(created, tenant.slug)
+    return created
 
 
 def update_user(
@@ -372,7 +403,11 @@ def update_user(
         payload=changes,
         ip_address=ip_address,
     )
-    return get_user_in_tenant(db, tenant_id, user_id)
+    updated = get_user_in_tenant(db, tenant_id, user_id)
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is not None:
+        request_user_provision(updated, tenant.slug)
+    return updated
 
 
 def assign_dept_role(
@@ -449,7 +484,16 @@ def assign_dept_role(
         },
         ip_address=ip_address,
     )
-    return get_user_in_tenant(db, tenant_id, user_id)
+    updated = get_user_in_tenant(db, tenant_id, user_id)
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is not None:
+        request_user_provision(
+            updated,
+            tenant.slug,
+            dept_code=dept.code,
+            dept_role=role,
+        )
+    return updated
 
 
 def remove_dept_role(

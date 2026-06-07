@@ -20,6 +20,12 @@ from app.models.department import Department, DepartmentStatus, DeptRole, UserDe
 from app.models.tenant import Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
 from app.models.user_auth import AuthProvider, UserAuthIdentity
+from app.models.provisioning_sync_log import (
+    ProvisioningEntityType,
+    ProvisioningOperation,
+    ProvisioningSyncLog,
+    ProvisioningSyncStatus,
+)
 from app.models.user_certificate import UserCertificate
 
 __all__ = [
@@ -28,6 +34,10 @@ __all__ = [
     "Department",
     "DepartmentStatus",
     "DeptRole",
+    "ProvisioningEntityType",
+    "ProvisioningOperation",
+    "ProvisioningSyncLog",
+    "ProvisioningSyncStatus",
     "SystemRole",
     "Tenant",
     "TenantSettings",

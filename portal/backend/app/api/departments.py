@@ -25,8 +25,11 @@ from sqlalchemy.orm import Session
 from app.api.schemas import (
     CreateDepartmentRequest,
     DepartmentResponse,
+    ProvisioningSummaryResponse,
     UpdateDepartmentRequest,
 )
+from app.models.tenant import Tenant
+from app.provisioning.service import ProvisioningService
 from app.auth.dependencies import require_tenant_admin_or_cntt_lanhdao
 from app.db import get_db
 from app.departments.service import (
@@ -93,7 +96,23 @@ def create_department_api(
         )
     except DeptError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
-    return DepartmentResponse(**department_to_dict(dept))
+
+    tenant = db.get(Tenant, user.tenant_id)
+    provisioning_summary = None
+    if tenant is not None:
+        summary = ProvisioningService(db).department_provisioning_summary(
+            tenant.slug,
+            user.tenant_id,
+            dept.code,
+        )
+        provisioning_summary = ProvisioningSummaryResponse(
+            status=summary.status.value,
+            message=summary.message,
+        )
+
+    payload = department_to_dict(dept)
+    payload["provisioning"] = provisioning_summary
+    return DepartmentResponse(**payload)
 
 
 @router.get("/{department_id}", response_model=DepartmentResponse)

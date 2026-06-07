@@ -26,6 +26,8 @@ from app.auth.dependencies import require_tenant_admin_or_cntt_lanhdao
 from app.departments.service import DeptError
 from app.main import app
 from app.models.department import Department, DepartmentStatus, DeptRole
+from app.models.provisioning_sync_log import ProvisioningSyncStatus
+from app.provisioning.service import ProvisioningResult
 from app.models.user import SystemRole, User, UserStatus
 from app.seed import DEMO_TENANT_ID
 
@@ -87,13 +89,21 @@ def test_create_department_as_admin() -> None:
         with patch(
             "app.api.departments.create_department",
             return_value=dept,
+        ), patch(
+            "app.api.departments.ProvisioningService.department_provisioning_summary",
+            return_value=ProvisioningResult(
+                entity_key="KETOAN",
+                status=ProvisioningSyncStatus.SKIPPED,
+            ),
         ):
             response = client.post(
                 "/departments",
                 json={"code": "KETOAN", "name": "Phòng Kế toán"},
             )
         assert response.status_code == 201
-        assert response.json()["code"] == "KETOAN"
+        body = response.json()
+        assert body["code"] == "KETOAN"
+        assert body["provisioning"]["status"] == "skipped"
     finally:
         app.dependency_overrides.clear()
 

@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     oidc_client_secret: str = "portal-dev-secret-change-in-prod"
     frontend_base_url: str = "http://localhost:3000"
     pki_root_ca_path: str | None = None
+    superset_internal_url: str = "http://localhost:8088"
+    superset_service_username: str = "portal_provisioner"
+    superset_service_api_key: str = ""
+    provisioning_max_retries: int = 5
+    provisioning_retry_delay_seconds: int = 60
+    provisioning_http_timeout: float = 30.0
 
 
 @lru_cache

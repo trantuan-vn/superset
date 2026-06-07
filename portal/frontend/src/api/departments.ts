@@ -18,6 +18,7 @@
  */
 
 import { apiFetch } from '@/api/auth';
+import type { ProvisioningSummary } from '@/api/provisioning';
 
 export type DepartmentStatus = 'active' | 'inactive';
 
@@ -27,6 +28,7 @@ export interface Department {
   code: string;
   name: string;
   status: DepartmentStatus;
+  provisioning?: ProvisioningSummary | null;
 }
 
 export interface CreateDepartmentPayload {

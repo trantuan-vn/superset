@@ -113,7 +113,14 @@ FEATURE_FLAGS = {
     "DATASET_FOLDERS": True,
     "ENABLE_EXTENSIONS": True,
     "SEMANTIC_LAYERS": True,
+    # Portal Phase 5 — role provisioning
+    "DASHBOARD_RBAC": True,
+    "GRANULAR_EXPORT_PERMISSIONS": True,
+    "FAB_API_KEY_ENABLED": True,
 }
+
+# Portal provisioning service account (API key auth)
+FAB_API_KEY_ENABLED = True
 EXTENSIONS_PATH = "/app/docker/extensions"
 ALERT_REPORTS_NOTIFICATION_DRY_RUN = True
 WEBDRIVER_BASEURL = f"http://superset_app{os.environ.get('SUPERSET_APP_ROOT', '/')}/"  # When using docker compose baseurl should be http://superset_nginx{ENV{BASEPATH}}/  # noqa: E501
