@@ -24,7 +24,7 @@ import { useAuth } from '@/features/auth/useAuth';
 import styles from './ProtectedRoute.module.css';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user, pkiPending } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -32,6 +32,20 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       <div className={styles.loading} role="status" aria-live="polite">
         <Spin size="large" />
       </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  if (pkiPending) {
+    return (
+      <Navigate
+        to="/login/pki"
+        replace
+        state={{ from: location.pathname }}
+      />
     );
   }
 

@@ -37,7 +37,8 @@ from app.auth.adapters.oidc import (
 )
 from app.auth.service import AuthError, LoginResult, _get_tenant_by_slug
 from app.auth.serialize import json_safe_attributes
-from app.auth.session import create_session, get_redis_client
+from app.auth.session import get_redis_client
+from app.auth.session_factory import create_auth_session
 from app.models.tenant import AuthMode, Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
 from app.models.user_auth import AuthProvider, UserAuthIdentity
@@ -210,7 +211,9 @@ def _complete_sso_login(
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
 
-    session_id, ttl_seconds = create_session(user.id, tenant.id)
+    session_id, ttl_seconds, pki_pending = create_auth_session(
+        user.id, tenant.id, settings
+    )
     write_audit_log(
         db,
         tenant_id=tenant.id,
@@ -218,7 +221,7 @@ def _complete_sso_login(
         entity_type="user",
         entity_id=str(user.id),
         actor_id=user.id,
-        payload={"method": provider.value},
+        payload={"method": provider.value, "pki_pending": pki_pending},
         ip_address=ip_address,
     )
     return LoginResult(
@@ -227,6 +230,7 @@ def _complete_sso_login(
         user=user,
         tenant=tenant,
         settings=settings,
+        pki_pending=pki_pending,
     )
 
 
@@ -372,5 +376,6 @@ def get_login_options(db: Session, *, tenant_slug: str) -> dict[str, Any]:
         "sso_primary": sso_enabled and auth_mode == "oidc",
         "show_local_login": not sso_enabled
         or auth_mode in ("local", "ldap"),
+        "pki_enabled": settings.digital_signature_enabled,
         "branding": settings.branding,
     }

@@ -41,6 +41,7 @@ export interface TenantSettingsPatch {
   auth_mode?: TenantSettings['auth_mode'];
   sso_config?: Record<string, unknown>;
   digital_signature_enabled?: boolean;
+  pki_config?: Record<string, unknown>;
   branding?: Record<string, unknown>;
   /** Required when first enabling LDAP — must match Portal password(s) to migrate. */
   portal_password?: string;
@@ -84,4 +85,26 @@ export async function updateTenantSettings(
     method: 'PATCH',
     body: JSON.stringify(patch),
   });
+}
+
+export async function uploadTenantCaCertificate(
+  tenantId: string,
+  certificate: string,
+): Promise<TenantSettings> {
+  return apiFetch<TenantSettings>(
+    `/tenants/${tenantId}/settings/pki/ca-certificate`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ certificate }),
+    },
+  );
+}
+
+export async function removeTenantCaCertificate(
+  tenantId: string,
+): Promise<TenantSettings> {
+  return apiFetch<TenantSettings>(
+    `/tenants/${tenantId}/settings/pki/ca-certificate`,
+    { method: 'DELETE' },
+  );
 }

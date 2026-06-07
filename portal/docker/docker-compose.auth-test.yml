@@ -87,7 +87,8 @@ services:
       DOCKER_STEPCA_INIT_PROVISIONER_NAME: portal-admin
       DOCKER_STEPCA_INIT_PASSWORD: changeit
     ports:
-      - "9443:9443"
+      # step-ca listens on :9000 inside the container (see config ca.json "address")
+      - "9443:9000"
     volumes:
       - step_ca_data:/home/step
       - ./auth-test/pki:/home/step/export
@@ -100,25 +101,40 @@ services:
       - -c
       - |
         set -e
-        echo "Waiting for step-ca..."
+        echo "Waiting for Step CA root certificate..."
         for i in $(seq 1 60); do
-          if step ca health --ca-url https://step-ca:9443 --root /home/step/certs/root_ca.crt 2>/dev/null; then
+          if [ -f /home/step/certs/root_ca.crt ]; then
             break
           fi
           sleep 2
         done
-        step ca bootstrap --ca-url https://step-ca:9443 --fingerprint "$$(step ca fingerprint --ca-url https://step-ca:9443)" --install
+        if [ ! -f /home/step/certs/root_ca.crt ]; then
+          echo "ERROR: /home/step/certs/root_ca.crt not found after timeout" >&2
+          exit 1
+        fi
+        FINGERPRINT=$$(step certificate fingerprint /home/step/certs/root_ca.crt)
         cp /home/step/certs/root_ca.crt /home/step/export/root_ca.crt
+        cp /home/step/certs/intermediate_ca.crt /home/step/export/intermediate_ca.crt
+        cat /home/step/certs/intermediate_ca.crt /home/step/certs/root_ca.crt \
+          > /home/step/export/ca_bundle.crt
+        echo "$$FINGERPRINT" > /home/step/export/ca_fingerprint.txt
         echo "Root CA exported to portal/docker/auth-test/pki/root_ca.crt"
-        step ca provisioner add portal-jwk --ca-url https://step-ca:9443 --create 2>/dev/null || true
-        step ca provisioner add portal-acme --ca-url https://step-ca:9443 --type ACME 2>/dev/null || true
-        echo "Step CA ready. Fingerprint:"
-        step ca fingerprint --ca-url https://step-ca:9443
+        echo "Intermediate CA exported to portal/docker/auth-test/pki/intermediate_ca.crt"
+        echo "Trust bundle exported to portal/docker/auth-test/pki/ca_bundle.crt"
+        echo "Upload ca_bundle.crt in tenant PKI settings (intermediate + root)."
+        echo "Fingerprint: $$FINGERPRINT"
+        step ca bootstrap \
+          --ca-url https://step-ca:9443 \
+          --fingerprint "$$FINGERPRINT" \
+          --install 2>/dev/null || true
+        echo "Step CA bootstrap complete."
     depends_on:
-      - step-ca
+      step-ca:
+        condition: service_started
     volumes:
       - step_ca_data:/home/step
       - ./auth-test/pki:/home/step/export
+    restart: "no"
 
 volumes:
   step_ca_data:

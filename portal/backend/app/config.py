@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     session_secret: str = "change-me-in-production-use-64-random-bytes"
     session_ttl_hours: int = 8
+    pki_pending_session_minutes: int = 30
     session_cookie_secure: bool = False
     session_cookie_samesite: str = "lax"
     max_login_attempts: int = 5
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     ldap_bind_password: str = "admin"
     oidc_client_secret: str = "portal-dev-secret-change-in-prod"
     frontend_base_url: str = "http://localhost:3000"
+    pki_root_ca_path: str | None = None
 
 
 @lru_cache

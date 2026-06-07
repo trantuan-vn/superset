@@ -52,6 +52,8 @@ services:
       FRONTEND_BASE_URL: http://localhost:3000
       LDAP_BIND_PASSWORD: admin
       OIDC_CLIENT_SECRET: portal-dev-secret-change-in-prod
+      # Phase 3 PKI — Step CA root (auth-test stack). Run step-ca-bootstrap first.
+      PKI_ROOT_CA_PATH: /etc/ssl/portal-ca/root_ca.crt
     ports:
       - "8000:8000"
     depends_on:
@@ -65,6 +67,8 @@ services:
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ../backend:/app/backend
+      # Mount Step CA root from auth-test (read-only). File appears after bootstrap.
+      - ./auth-test/pki/root_ca.crt:/etc/ssl/portal-ca/root_ca.crt:ro
 
   portal-web:
     build:

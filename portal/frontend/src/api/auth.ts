@@ -20,6 +20,7 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 export type SystemRole =
+  | 'platform_admin'
   | 'tenant_admin'
   | 'cntt_chuyenvien'
   | 'cntt_lanhdao'
@@ -50,6 +51,24 @@ export interface AuthTenant {
 export interface MeResponse {
   user: AuthUser;
   tenant: AuthTenant;
+  pki_pending?: boolean;
+  cert_serial?: string | null;
+}
+
+export interface PkiChallengeResponse {
+  nonce: string;
+  expires_in_seconds: number;
+}
+
+export interface PkiVerifyPayload {
+  certificate: string;
+  signature: string;
+}
+
+export interface PkiVerifyResponse {
+  cert_serial: string;
+  subject_dn: string;
+  message: string;
 }
 
 export interface LoginPayload {
@@ -65,6 +84,7 @@ export interface LoginOptions {
   auth_mode: 'local' | 'oidc' | 'saml' | 'ldap';
   sso_primary: boolean;
   show_local_login: boolean;
+  pki_enabled?: boolean;
   branding?: TenantBranding | null;
 }
 
@@ -129,6 +149,21 @@ export function ssoLoginUrl(tenantSlug: string): string {
   const base = API_BASE || '';
   const params = new URLSearchParams({ tenant_slug: tenantSlug });
   return `${base}/auth/sso/login?${params.toString()}`;
+}
+
+export async function fetchPkiChallenge(): Promise<PkiChallengeResponse> {
+  return apiFetch<PkiChallengeResponse>('/auth/pki/challenge', {
+    method: 'POST',
+  });
+}
+
+export async function verifyPki(
+  payload: PkiVerifyPayload,
+): Promise<PkiVerifyResponse> {
+  return apiFetch<PkiVerifyResponse>('/auth/pki/verify', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export { ApiError };

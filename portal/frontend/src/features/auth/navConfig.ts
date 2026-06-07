@@ -28,6 +28,11 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { key: '/dashboard', labelKey: 'nav.overview', roles: 'all' },
   {
+    key: '/platform/tenants',
+    labelKey: 'nav.platformTenants',
+    roles: ['platform_admin'],
+  },
+  {
     key: '/admin/settings',
     labelKey: 'nav.tenantSettings',
     roles: ['tenant_admin'],

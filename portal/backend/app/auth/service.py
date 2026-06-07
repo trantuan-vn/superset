@@ -27,10 +27,10 @@ from app.audit.service import write_audit_log
 from app.auth.password import verify_password
 from app.auth.session import (
     clear_login_attempts,
-    create_session,
     delete_session,
     increment_login_attempts,
 )
+from app.auth.session_factory import create_auth_session
 from app.config import get_settings
 from app.models.tenant import AuthMode, Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
@@ -52,6 +52,7 @@ class LoginResult:
     user: User
     tenant: Tenant
     settings: TenantSettings
+    pki_pending: bool = False
 
 
 @dataclass
@@ -59,10 +60,13 @@ class MeResult:
     user: User
     tenant: Tenant
     settings: TenantSettings
+    pki_pending: bool = False
+    cert_serial: str | None = None
 
 
 def _get_tenant_by_slug(db: Session, slug: str) -> Tenant:
-    tenant = db.scalar(select(Tenant).where(Tenant.slug == slug))
+    normalized = slug.strip().lower()
+    tenant = db.scalar(select(Tenant).where(Tenant.slug == normalized))
     if tenant is None:
         raise AuthError("Tenant not found", status_code=404)
     return tenant
@@ -174,7 +178,9 @@ def login(
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
 
-    session_id, ttl_seconds = create_session(user.id, tenant.id)
+    session_id, ttl_seconds, pki_pending = create_auth_session(
+        user.id, tenant.id, tenant_settings
+    )
 
     write_audit_log(
         db,
@@ -183,7 +189,7 @@ def login(
         entity_type="user",
         entity_id=str(user.id),
         actor_id=user.id,
-        payload={"method": "local"},
+        payload={"method": "local", "pki_pending": pki_pending},
         ip_address=ip_address,
     )
 
@@ -193,6 +199,7 @@ def login(
         user=user,
         tenant=tenant,
         settings=tenant_settings,
+        pki_pending=pki_pending,
     )
 
 
@@ -216,7 +223,13 @@ def logout(
     )
 
 
-def get_me(db: Session, user_id: uuid.UUID) -> MeResult:
+def get_me(
+    db: Session,
+    user_id: uuid.UUID,
+    *,
+    pki_pending: bool = False,
+    cert_serial: str | None = None,
+) -> MeResult:
     """Load current user with tenant context."""
     stmt = (
         select(User)
@@ -233,4 +246,10 @@ def get_me(db: Session, user_id: uuid.UUID) -> MeResult:
     if tenant_settings is None:
         raise AuthError("Tenant settings not found", status_code=500)
 
-    return MeResult(user=user, tenant=user.tenant, settings=tenant_settings)
+    return MeResult(
+        user=user,
+        tenant=user.tenant,
+        settings=tenant_settings,
+        pki_pending=pki_pending,
+        cert_serial=cert_serial,
+    )

@@ -29,9 +29,11 @@ from app.db import Base
 
 if TYPE_CHECKING:
     from app.models.user_auth import UserAuthIdentity
+    from app.models.user_certificate import UserCertificate
 
 
 class SystemRole(str, enum.Enum):
+    PLATFORM_ADMIN = "platform_admin"
     TENANT_ADMIN = "tenant_admin"
     CNTT_CHUYENVIEN = "cntt_chuyenvien"
     CNTT_LANHDAO = "cntt_lanhdao"
@@ -90,4 +92,7 @@ class User(Base):
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="users")
     auth_identities: Mapped[list["UserAuthIdentity"]] = relationship(
         "UserAuthIdentity", back_populates="user"
+    )
+    certificates: Mapped[list["UserCertificate"]] = relationship(
+        "UserCertificate", back_populates="user"
     )

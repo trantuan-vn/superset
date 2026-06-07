@@ -29,7 +29,9 @@ from app.api.schemas import (
     UserResponse,
     branding_from_json,
 )
-from app.auth.dependencies import get_current_user, get_session_id
+from app.auth.dependencies import get_current_user, get_session_data, get_session_id
+from app.auth.pki_service import reconcile_session_pki_with_tenant, session_needs_pki
+from app.auth.session import SessionData
 from app.auth.service import AuthError, get_me, login, logout
 from app.auth.session import SESSION_COOKIE_NAME
 from app.config import get_settings
@@ -104,6 +106,7 @@ def auth_login(
             name=result.tenant.name,
             branding=branding_from_json(result.settings.branding),
         ),
+        pki_pending=result.pki_pending,
     )
 
 
@@ -124,6 +127,8 @@ def auth_logout(
 def auth_me(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[SessionData, Depends(get_session_data)],
+    session_id: Annotated[str, Depends(get_session_id)],
 ) -> MeResponse:
     try:
         result = get_me(db, user.id)
@@ -131,6 +136,10 @@ def auth_me(
         from fastapi import HTTPException
 
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+    session = reconcile_session_pki_with_tenant(
+        session, session_id, result.settings
+    )
 
     return MeResponse(
         user=_user_response(result.user),
@@ -140,4 +149,6 @@ def auth_me(
             name=result.tenant.name,
             branding=branding_from_json(result.settings.branding),
         ),
+        pki_pending=session_needs_pki(session),
+        cert_serial=session.cert_serial,
     )

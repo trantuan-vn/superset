@@ -24,6 +24,7 @@ from app.config import get_settings
 _REF_ENV_MAP: dict[str, str] = {
     "secret/portal/ldap-bind": "ldap_bind_password",
     "secret/portal/keycloak-client": "oidc_client_secret",
+    "secret/portal/pki/root_ca.pem": "pki_root_ca_path",
 }
 
 

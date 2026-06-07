@@ -1,14 +1,15 @@
-# Spec Portal Kết xuất Dữ liệu v1.2
+# Spec Portal Kết xuất Dữ liệu v1.3
 
 > **Mục đích:** Đặc tả triển khai **tuần tự, có Gate kiểm duyệt** cho Portal quy trình kết xuất trên Apache Superset.  
 > **Nguyên tắc:** Mỗi Phase = **Backend + Frontend + Gate** → OK mới sang Phase tiếp theo.  
-> **Trạng thái:** Draft v1.2 — UI/UX enterprise (§14), auth test (§12), K8s LDAP/PKI (§13).
+> **Trạng thái:** Draft v1.3 — UI/UX enterprise (§14), auth test (§12), K8s LDAP/PKI (§13), **tổ chức multi-tenant** (§2.2).
 
 ### Cách đọc tài liệu
 
 | Bạn cần | Đọc |
 |---|---|
 | Bắt đầu triển khai | §3 bảng tóm tắt → §7 Phase 0 |
+| **Onboard doanh nghiệp / PKI theo công ty** | **§2.2** |
 | Thiết kế giao diện | §14 (bắt buộc từ Phase 0) |
 | Schema DB | §5 |
 | Test LDAP/PKI local | §12 |
@@ -29,7 +30,7 @@ Mỗi Phase gồm 4 khối cố định:
 ## Mục lục
 
 1. [Tổng quan kiến trúc](#1-tổng-quan-kiến-trúc)
-2. [Ma trận quyết định đã chốt](#2-ma-trận-quyết-định-đã-chốt)
+2. [Ma trận quyết định đã chốt](#2-ma-trận-quyết-định-đã-chốt) — gồm [§2.2 Tổ chức multi-tenant](#22-mô-hình-tổ-chức-multi-tenant-platform--doanh-nghiệp)
 3. [Sơ đồ Phase nối tiếp](#3-sơ-đồ-phase-nối-tiếp)
 4. [Cấu trúc repo & hạ tầng](#4-cấu-trúc-repo--hạ-tầng)
 5. [ERD & Schema dữ liệu Portal](#5-erd--schema-dữ-liệu-portal)
@@ -107,12 +108,12 @@ End-user **không đăng nhập Superset trực tiếp**. Mọi thao tác đi qu
 | # | Hạng mục | Quyết định |
 |---|---|---|
 | 1 | Kiến trúc | Portal quy trình + Superset engine |
-| 2 | Multi-tenant | Nhiều doanh nghiệp, phòng ban **động** |
+| 2 | Multi-tenant | Nhiều doanh nghiệp, phòng ban **động**; **platform admin** onboard tenant, **tenant admin** tự quản (§2.2) |
 | 3 | AI | Tùy chọn enable/disable, LLM nội bộ hoặc cloud theo tenant |
 | 4 | Kết xuất | CSV + Excel (XLSX) + PDF |
 | 5 | Chia sẻ mẫu | `ALL` (tất cả dept) hoặc `SELECTED` (chọn từng dept) |
 | 6 | SSO/LDAP | Tùy chọn enable/disable theo tenant |
-| 7 | Ký số | Tùy chọn; **bật = 100% user login bằng chứng thư số** |
+| 7 | Ký số | Tùy chọn; **bật = 100% user login bằng chứng thư số**; CA **upload per-tenant** (§2.2.4) |
 | 8 | **Giao diện** | Enterprise, responsive, white-label tenant, accessibility AA (§14) |
 
 ### 2.1. Nguyên tắc kỹ thuật (ràng buộc xuyên suốt)
@@ -125,6 +126,115 @@ End-user **không đăng nhập Superset trực tiếp**. Mọi thao tác đi qu
 | P4 | **Audit mọi hành động nhạy cảm** | Login, duyệt, download — immutable log |
 | P5 | **UI nhất quán trước feature** | Shell + design system (§14) từ Phase 0, không “vá UI” cuối |
 | P6 | **Không secret trong git** | Vault / K8s Secret / Sealed Secrets |
+| P7 | **CA PKI theo tenant** | Mỗi doanh nghiệp upload `root_ca.crt` qua UI — không bắt buộc mount file vào container |
+
+### 2.2. Mô hình tổ chức multi-tenant (Platform ↔ Doanh nghiệp)
+
+Portal phục vụ **nhiều công ty độc lập**. Mỗi công ty là một **tenant**; mỗi tenant có **một hoặc nhiều admin doanh nghiệp** tự quản lý SSO/PKI. Một lớp **platform admin** (vận hành hệ thống) onboard tenant và gán admin — không thay thế admin nội bộ của từng công ty.
+
+#### 2.2.1. Hai lớp quản trị
+
+| Vai trò | `system_role` | Tenant | Trách nhiệm |
+|---|---|---|---|
+| **Platform admin** | `platform_admin` | `platform` (reserved) | Tạo tenant, gán `tenant_admin`, xem danh sách doanh nghiệp |
+| **Tenant admin** | `tenant_admin` | `demo-corp`, `acme`, … | Cài đặt SSO/LDAP, **upload root CA**, bật PKI, quản lý user/dept (Phase 4+) |
+| User nghiệp vụ | `cntt_*`, `dept_user` | tenant của mình | Workflow kết xuất — không cấu hình IAM |
+
+**Tenant đặc biệt `platform`:** slug reserved — không dùng cho doanh nghiệp thật. User `platform_admin` đăng nhập với `tenant_slug=platform`.
+
+**Seed dev (tham chiếu):**
+
+| Tenant slug | User | Mật khẩu | Role |
+|---|---|---|---|
+| `platform` | `admin@platform` | `Pass123!` | `platform_admin` |
+| `demo-corp` | `admin@demo-corp` | `Pass123!` | `tenant_admin` |
+
+#### 2.2.2. Sơ đồ phân tầng
+
+```
+                    ┌─────────────────────────────────────┐
+                    │  Platform admin (tenant: platform)   │
+                    │  /platform/tenants                   │
+                    │  • Tạo doanh nghiệp + admin đầu tiên │
+                    └──────────────────┬──────────────────┘
+                                       │ onboard
+           ┌───────────────────────────┼───────────────────────────┐
+           ▼                           ▼                           ▼
+   ┌───────────────┐           ┌───────────────┐           ┌───────────────┐
+   │ demo-corp     │           │ acme-corp     │           │ …             │
+   │ tenant_admin  │           │ tenant_admin  │           │               │
+   │ /admin/settings│          │ /admin/settings│          │               │
+   │ • Upload CA   │           │ • Upload CA   │           │               │
+   │ • Bật PKI     │           │ • Bật SSO     │           │               │
+   └───────┬───────┘           └───────────────┘           └───────────────┘
+           │
+           ▼
+   Users: cntt_cv, cntt_ld, dept_user
+   (PKI verify dùng CA đã upload của demo-corp)
+```
+
+#### 2.2.3. Luồng vận hành chuẩn
+
+```
+1. Platform admin
+   → POST /platform/tenants { slug, name, admin_email, admin_password, … }
+   → Tenant + tenant_admin đầu tiên được tạo
+
+2. Tenant admin (đăng nhập slug doanh nghiệp)
+   → POST /tenants/{id}/settings/pki/ca-certificate  (upload root_ca.crt)
+   → PATCH /tenants/{id}/settings  (digital_signature_enabled=true)
+   → Bắt buộc đã upload CA trước khi bật PKI
+
+3. End-user
+   → Login local/SSO (bước 1)
+   → /login/pki — ký challenge bằng cert do CA của tenant cấp
+   → Verify chain theo ca_certificate_pem trong DB (per-tenant)
+```
+
+#### 2.2.4. PKI trust store — ưu tiên upload, fallback operator
+
+| Thứ tự | Nguồn | Ai cấu hình | Ghi chú |
+|:---:|---|---|---|
+| 1 | `pki_config.ca_certificate_pem` | **Tenant admin** (UI upload) | **Khuyến nghị** — mỗi công ty một CA |
+| 2 | `pki_config.trust_store_ref` | Operator (secret ref) | Legacy / automation |
+| 3 | `PKI_ROOT_CA_PATH` (env) | Operator (mount file) | Chỉ dev shortcut — **không bắt buộc** khi đã upload |
+
+API **không trả** PEM thô — chỉ metadata: `ca_certificate_uploaded`, `ca_subject_dn`, `ca_fingerprint`, `ca_uploaded_at`.
+
+**Ràng buộc:**
+
+- Bật `digital_signature_enabled` **chỉ khi** đã có CA tin cậy (upload hoặc fallback operator).
+- Xóa CA → tự tắt PKI nếu không còn nguồn trust khác.
+- PKI gate áp dụng **100% user** tenant đó — không role miễn (kể cả `tenant_admin`).
+
+#### 2.2.5. Cấu trúc `pki_config` (sau upload)
+
+```json
+{
+  "ca_certificate_pem": "<lưu DB — không expose API>",
+  "ca_subject_dn": "CN=ACME Internal CA",
+  "ca_fingerprint": "<sha256 hex>",
+  "ca_uploaded_at": "2026-06-05T10:00:00+00:00",
+  "ocsp_enabled": false,
+  "require_cert_at_login": true,
+  "require_cert_at_approval": true,
+  "allowed_eku": ["clientAuth", "emailProtection"],
+  "reject_expired": true,
+  "reject_revoked": true
+}
+```
+
+Response API (masked):
+
+```json
+{
+  "ca_certificate_pem": null,
+  "ca_certificate_uploaded": true,
+  "ca_subject_dn": "CN=ACME Internal CA",
+  "ca_fingerprint": "a1b2c3…",
+  "ca_uploaded_at": "2026-06-05T10:00:00+00:00"
+}
+```
 
 ---
 
@@ -287,7 +397,7 @@ tenants ──1:1── tenant_settings
 | Cột | Kiểu | Mô tả |
 |---|---|---|
 | `id` | UUID PK | |
-| `slug` | VARCHAR UNIQUE | Mã tenant, vd: `congty-a` |
+| `slug` | VARCHAR UNIQUE | Mã tenant, vd: `congty-a`. **`platform` reserved** cho vận hành hệ thống |
 | `name` | VARCHAR | Tên doanh nghiệp |
 | `status` | ENUM | `active`, `suspended`, `archived` |
 | `created_at` | TIMESTAMPTZ | |
@@ -301,7 +411,7 @@ tenants ──1:1── tenant_settings
 | `auth_mode` | ENUM | 2 | `local`, `oidc`, `saml`, `ldap` |
 | `sso_config` | JSONB | 2 | Cấu hình IdP (secret ref) |
 | `digital_signature_enabled` | BOOLEAN DEFAULT false | 3 | |
-| `pki_config` | JSONB | 3 | CA provider, OCSP URL, ... |
+| `pki_config` | JSONB | 3 | Root CA upload (`ca_certificate_pem`), OCSP, EKU — xem §2.2.4 |
 | `ai_enabled` | BOOLEAN DEFAULT false | 7 | |
 | `ai_config` | JSONB | 7 | Provider, model, endpoint |
 | `export_formats` | TEXT[] | 11 | `['csv','xlsx','pdf']` |
@@ -318,7 +428,7 @@ tenants ──1:1── tenant_settings
 | `email` | VARCHAR | 1 | |
 | `password_hash` | VARCHAR NULL | 1 | NULL khi chỉ SSO |
 | `display_name` | VARCHAR | 1 | |
-| `system_role` | ENUM | 1 | `tenant_admin`, `cntt_chuyenvien`, `cntt_lanhdao`, `dept_user` |
+| `system_role` | ENUM | 1 | `platform_admin`, `tenant_admin`, `cntt_chuyenvien`, `cntt_lanhdao`, `dept_user` |
 | `status` | ENUM | 1 | `active`, `inactive`, `locked` |
 | `last_login_at` | TIMESTAMPTZ | 1 | |
 
@@ -571,23 +681,25 @@ t_{tenant_slug}_d_{dept_code}_ld   # Ban NV lãnh đạo
 
 ### Phase 3: Ký số PKI Login (Feature Flag — Tùy chọn)
 
-**Mục tiêu:** Khi bật flag — **100% user** xác thực cert sau bước login (local/SSO).
+**Mục tiêu:** Khi bật flag — **100% user** xác thực cert sau bước login (local/SSO). Mỗi tenant dùng **CA riêng** do tenant admin upload.
 
 | Lớp | Phạm vi |
 |---|---|
-| **Backend** | `/auth/pki/challenge|verify`, `user_certificates`, OCSP mock |
-| **Frontend** | **Wizard bước 2** — chọn cert, trạng thái token, hướng dẫn cài driver (§14.5) |
+| **Backend** | `/auth/pki/challenge|verify`, `user_certificates`, OCSP mock; **upload CA** `POST/DELETE …/pki/ca-certificate`; **platform** `GET/POST /platform/tenants` (§2.2) |
+| **Frontend** | **Wizard bước 2** — chọn cert (§14.5); **Admin** upload `root_ca.crt` thay mount file; **Platform** `/platform/tenants` |
 | **Test** | Step CA §12.5 |
 
-**Chính sách:** Cert hết hạn / thu hồi → từ chối; không role miễn.
+**Chính sách:** Cert hết hạn / thu hồi → từ chối; không role miễn. Bật PKI chỉ sau khi upload CA (§2.2.3).
 
 **Deliverables:**
 - [ ] PKI gate sau auth bước 1
 - [ ] **UI:** Progress `Đăng nhập → Xác thực chứng thư số → Hoàn tất`
 - [ ] **UI:** Error states: không token, cert hết hạn, OCSP fail
-- [ ] Admin toggle PKI + cảnh báo “toàn bộ user cần cert”
+- [ ] Tenant admin: upload/replace/remove root CA + metadata (subject, fingerprint)
+- [ ] Tenant admin toggle PKI + cảnh báo “toàn bộ user cần cert”
+- [ ] Platform admin: onboard tenant + gán `tenant_admin` đầu tiên
 
-**Gate 3:** §12 T4/T5/T6 + SSO+PKI combo.
+**Gate 3:** §12 T4/T5/T6 + SSO+PKI combo; **2 tenant** với **2 CA khác nhau** không cross-verify.
 
 **Phụ thuộc:** Gate 2 (hoặc Gate 1 nếu tạm bỏ SSO — không khuyến nghị prod)
 
@@ -829,16 +941,46 @@ AND dept_code = '{{ current_user_dept() }}'
 | POST | `/auth/pki/challenge` | 3 | Nonce ký số |
 | POST | `/auth/pki/verify` | 3 | Xác thực cert |
 
-### 8.2. Admin (Phase 2–4)
+### 8.2. Platform operator (Phase 3+)
 
-| Method | Path | Phase | Mô tả |
+| Method | Path | Role | Mô tả |
 |---|---|---|---|
-| GET/PATCH | `/tenants/{id}/settings` | 2 | SSO, PKI, AI config |
+| GET | `/platform/tenants` | `platform_admin` | Danh sách doanh nghiệp (trừ tenant `platform`) |
+| POST | `/platform/tenants` | `platform_admin` | Tạo tenant + `tenant_admin` đầu tiên |
+| POST | `/platform/tenants/{id}/admins` | `platform_admin` | Thêm `tenant_admin` cho tenant |
+
+Body `POST /platform/tenants` (ví dụ):
+
+```json
+{
+  "slug": "acme-corp",
+  "name": "ACME Corporation",
+  "admin_email": "admin@acme-corp",
+  "admin_password": "ChangeMe123!",
+  "admin_display_name": "ACME Administrator"
+}
+```
+
+### 8.3. Tenant admin (Phase 2–4)
+
+| Method | Path | Role | Mô tả |
+|---|---|---|---|
+| GET/PATCH | `/tenants/{id}/settings` | `tenant_admin` | SSO, PKI flags, AI config |
+| POST | `/tenants/{id}/settings/pki/ca-certificate` | `tenant_admin` | Upload `root_ca.crt` (PEM body) |
+| DELETE | `/tenants/{id}/settings/pki/ca-certificate` | `tenant_admin` | Xóa CA đã upload |
 | CRUD | `/departments` | 4 | |
 | CRUD | `/users` | 4 | |
 | POST | `/users/{id}/dept-roles` | 4 | Gán dept role |
 
-### 8.3. Templates (Phase 7–9)
+Body upload CA:
+
+```json
+{
+  "certificate": "-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"
+}
+```
+
+### 8.4. Templates (Phase 7–9)
 
 | Method | Path | Phase | Mô tả |
 |---|---|---|---|
@@ -850,7 +992,7 @@ AND dept_code = '{{ current_user_dept() }}'
 | POST | `/templates/{id}/publish` | 9 | Body: share_mode, department_ids |
 | PATCH | `/templates/{id}/share-scope` | 9 | |
 
-### 8.4. Transactions (Phase 10–11)
+### 8.5. Transactions (Phase 10–11)
 
 | Method | Path | Phase | Mô tả |
 |---|---|---|---|
@@ -929,7 +1071,8 @@ Trước khi chuyển Phase, reviewer xác nhận:
 | Menu | Route | Roles |
 |---|---|---|
 | Tổng quan | `/dashboard` | Tất cả |
-| Cài đặt tenant | `/admin/settings` | tenant_admin |
+| Quản lý doanh nghiệp | `/platform/tenants` | `platform_admin` |
+| Cài đặt tenant | `/admin/settings` | `tenant_admin` |
 | Phòng ban & User | `/admin/departments`, `/admin/users` | tenant_admin, cntt_ld |
 | Mẫu kết xuất (CNTT) | `/cntt/templates` | cntt_cv, cntt_ld |
 | Hàng chờ duyệt mẫu | `/cntt/approvals` | cntt_ld |
@@ -947,6 +1090,10 @@ Header cố định: **logo tenant** · tên user · dept badge · nút đăng x
 | `AUTH_LOGIN` | 1 |
 | `AUTH_SSO_LOGIN` | 2 |
 | `AUTH_PKI_SUCCESS` | 3 |
+| `TENANT_CREATED` | 3 |
+| `TENANT_ADMIN_ADDED` | 3 |
+| `PKI_CA_UPLOADED` | 3 |
+| `PKI_CA_REMOVED` | 3 |
 | `DEPT_CREATED` | 4 |
 | `PROVISION_ROLE` | 5 |
 | `RLS_CREATED` | 6 |
@@ -1115,39 +1262,63 @@ docker compose -f portal/docker/docker-compose.auth-test.yml logs step-ca-bootst
 # Root CA (import vào OS/browser trust store)
 ls portal/docker/auth-test/pki/root_ca.crt
 
-# Lấy fingerprint
-docker exec portal-auth-step-ca step ca fingerprint --ca-url https://localhost:9443
+# Lấy fingerprint (step CLI ≥ 0.30 — không còn `step ca fingerprint`)
+cat portal/docker/auth-test/pki/ca_fingerprint.txt
+# hoặc:
+docker exec portal-auth-step-ca step certificate fingerprint /home/step/certs/root_ca.crt
 ```
 
 **Cấp cert client test** (cần cài [step CLI](https://smallstep.com/docs/step-cli/) trên máy dev):
 
 ```bash
 chmod +x portal/docker/auth-test/scripts/issue-test-cert.sh
-export STEP_CA_FINGERPRINT="<fingerprint-từ-lệnh-trên>"
 portal/docker/auth-test/scripts/issue-test-cert.sh cntt.cv
+# Script tự đọc fingerprint từ ca_fingerprint.txt
 ```
 
 **Import cert vào browser (Chrome):** Settings → Privacy → Security → Manage certificates → Import `cntt.cv.crt` + private key.
 
-**Cấu hình `tenant_settings.pki_config` — dev:**
+**Cấu hình PKI — dev (khuyến nghị — upload qua UI, §2.2):**
+
+1. Đăng nhập `demo-corp` / `admin@demo-corp`
+2. **Cài đặt tenant** → **Tải lên root CA** → chọn `portal/docker/auth-test/pki/root_ca.crt`
+3. Bật `digital_signature_enabled` → Lưu
+
+Hoặc qua API:
+
+```bash
+curl -b cookies.txt -X POST \
+  "http://localhost:8000/tenants/{tenant_id}/settings/pki/ca-certificate" \
+  -H "Content-Type: application/json" \
+  -d "{\"certificate\": \"$(cat portal/docker/auth-test/pki/root_ca.crt | sed 's/\"/\\\"/g')\"}"
+```
+
+`pki_config` sau upload (PEM không trả về client):
 
 ```json
 {
-  "ca_provider": "step_ca_dev",
-  "trust_store_ref": "secret/portal/pki/root_ca.pem",
+  "ca_certificate_uploaded": true,
+  "ca_subject_dn": "CN=Portal Dev CA",
+  "ca_fingerprint": "<sha256>",
   "ocsp_enabled": false,
   "require_cert_at_login": true,
   "require_cert_at_approval": true,
-  "allowed_eku": ["clientAuth", "emailProtection"]
+  "allowed_eku": ["clientAuth", "emailProtection"],
+  "reject_expired": true,
+  "reject_revoked": true
 }
 ```
 
+> **Legacy dev:** `trust_store_ref` + mount `PKI_ROOT_CA_PATH` vẫn hoạt động như fallback operator — không cần khi đã upload CA.
+
 **Gate 3 — PKI:**
 
-1. Bật `digital_signature_enabled=true` trên tenant demo  
-2. Login LDAP/OIDC → bước PKI hiện ra  
-3. Chọn cert `cntt.cv` → verify OK → `/auth/me` có `cert_serial`  
-4. Cert không import / hết hạn → 403  
+1. Upload `root_ca.crt` trên tenant demo (bước bắt buộc trước khi bật PKI)
+2. Bật `digital_signature_enabled=true`
+3. Login LDAP/OIDC/local → bước PKI hiện ra
+4. Chọn cert `cntt.cv` (cấp bởi Step CA) → verify OK → `/auth/me` có `cert_serial`
+5. Cert sai CA / hết hạn → 403
+6. *(Tuỳ chọn)* Platform admin tạo tenant thứ 2 với CA khác → cert tenant A không verify trên tenant B
 
 ### 12.6. Ma trận test theo Phase
 
@@ -1404,10 +1575,13 @@ env:
 
 ### 13.8. Cấu hình tenant production (Ký số — VNCA / CA nội bộ)
 
+**Khuyến nghị:** Tenant admin upload full chain root/intermediate qua UI (§2.2) — không phụ thuộc mount Secret trên pod.
+
 ```json
 {
-  "ca_provider": "vnca",
-  "trust_store_ref": "k8s:portal/portal-pki#root_ca.pem",
+  "ca_certificate_uploaded": true,
+  "ca_subject_dn": "CN=Company Internal CA",
+  "ca_fingerprint": "<sha256>",
   "ocsp_enabled": true,
   "ocsp_url": "http://ocsp.vnca.gov.vn",
   "crl_enabled": true,
@@ -1417,6 +1591,14 @@ env:
   "allowed_eku": ["clientAuth"],
   "reject_expired": true,
   "reject_revoked": true
+}
+```
+
+**Fallback operator** (khi CA do DevOps quản lý tập trung, không qua UI):
+
+```json
+{
+  "trust_store_ref": "k8s:portal/portal-pki#root_ca.pem"
 }
 ```
 
@@ -1492,13 +1674,14 @@ kubectl apply -f k8s/portal/secrets/   # sealed hoặc inject CI
 ### 13.11. Quy trình bật LDAP/PKI trên tenant production
 
 ```
+0. Platform admin onboard tenant (POST /platform/tenants) + gán tenant_admin
 1. Triển khai Portal Phase 1–11 (feature flag OFF) → smoke test local auth
 2. Cấu hình Secret LDAP + test bind từ pod:
      kubectl -n portal exec -it deploy/portal -- ldapwhoami -H $LDAP_URI ...
-3. Bật sso_ldap_enabled trên 1 tenant pilot → Gate 2 production
-4. Cấu hình Secret PKI root CA + OCSP
-5. Pilot 5–10 user cài token → bật digital_signature_enabled → Gate 3 production
-6. Mở rộng toàn tenant / thêm tenant
+3. Tenant admin bật sso_ldap_enabled trên tenant pilot → Gate 2 production
+4. Tenant admin upload root_ca.crt (hoặc operator mount Secret PKI — fallback §2.2.4)
+5. Pilot 5–10 user cài token → tenant admin bật digital_signature_enabled → Gate 3 production
+6. Platform admin thêm tenant / tenant admin mở rộng user
 ```
 
 **Rollback:** Tắt flag trên tenant → user fallback local (nếu policy cho phép) hoặc read-only mode.
@@ -1750,4 +1933,4 @@ Tạo trong `portal/frontend/src/components/` — **reuse**, không duplicate:
 
 **Phiên bản:** 1.2  
 **Cập nhật:** 2026-06-05  
-**Trạng thái:** Sẵn sàng review — Phase 0 (shell + tokens) → Phase 1 (login). UI: §14. Auth test: §12. K8s: §13.
+**Trạng thái:** Sẵn sàng review — Phase 0 (shell + tokens) → Phase 1 (login). UI: §14. Auth test: §12. K8s: §13. Tổ chức multi-tenant: §2.2.

@@ -18,14 +18,21 @@
  */
 import { createContext } from 'react';
 
-import type { AuthTenant, AuthUser, LoginPayload } from '@/api/auth';
+import type {
+  AuthTenant,
+  AuthUser,
+  LoginPayload,
+  MeResponse,
+} from '@/api/auth';
 
 export interface AuthContextValue {
   user: AuthUser | null;
   tenant: AuthTenant | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (payload: LoginPayload) => Promise<void>;
+  pkiPending: boolean;
+  certSerial: string | null;
+  login: (payload: LoginPayload) => Promise<MeResponse>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 }

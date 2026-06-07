@@ -21,12 +21,15 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/app/AppShell';
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
 import { AdminSettingsPage } from '@/pages/AdminSettingsPage';
+import { PlatformTenantsPage } from '@/pages/PlatformTenantsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { HealthUiPage } from '@/pages/HealthUiPage';
 import { LoginPage } from '@/pages/LoginPage';
+import { PkiVerifyPage } from '@/pages/PkiVerifyPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/login/pki', element: <PkiVerifyPage /> },
   {
     path: '/',
     element: (
@@ -38,6 +41,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
       { path: 'admin/settings', element: <AdminSettingsPage /> },
+      { path: 'platform/tenants', element: <PlatformTenantsPage /> },
       { path: 'health-ui', element: <HealthUiPage /> },
     ],
   },

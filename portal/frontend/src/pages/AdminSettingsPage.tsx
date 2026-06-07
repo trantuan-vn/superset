@@ -21,20 +21,26 @@ import {
   Alert,
   Button,
   Card,
+  Descriptions,
   Form,
   Input,
   Select,
   Space,
   Switch,
   Typography,
+  Upload,
   message,
 } from 'antd';
+import type { UploadProps } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
 import { ApiError } from '@/api/auth';
 import {
   fetchTenantSettings,
+  removeTenantCaCertificate,
   updateTenantSettings,
+  uploadTenantCaCertificate,
   type TenantSettingsPatch,
 } from '@/api/tenants';
 import { PageHeader } from '@/components/PageHeader';
@@ -43,6 +49,8 @@ import { useAuth } from '@/features/auth/useAuth';
 interface AuthSettingsFormValues {
   sso_ldap_enabled: boolean;
   auth_mode: 'local' | 'oidc' | 'saml' | 'ldap';
+  digital_signature_enabled: boolean;
+  ocsp_enabled: boolean;
   ldap_uri?: string;
   bind_dn?: string;
   bind_password?: string;
@@ -70,6 +78,33 @@ export function AdminSettingsPage() {
     enabled: Boolean(tenantId),
   });
 
+  const caUploadMutation = useMutation({
+    mutationFn: (certificate: string) =>
+      uploadTenantCaCertificate(tenantId, certificate),
+    onSuccess: () => {
+      message.success(t('adminSettings.caUploaded'));
+      void queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
+    },
+    onError: (err: Error) => {
+      const text =
+        err instanceof ApiError ? err.message : t('adminSettings.caUploadError');
+      message.error(text);
+    },
+  });
+
+  const caRemoveMutation = useMutation({
+    mutationFn: () => removeTenantCaCertificate(tenantId),
+    onSuccess: () => {
+      message.success(t('adminSettings.caRemoved'));
+      void queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
+    },
+    onError: (err: Error) => {
+      const text =
+        err instanceof ApiError ? err.message : t('adminSettings.caRemoveError');
+      message.error(text);
+    },
+  });
+
   const saveMutation = useMutation({
     mutationFn: (patch: TenantSettingsPatch) =>
       updateTenantSettings(tenantId, patch),
@@ -91,6 +126,8 @@ export function AdminSettingsPage() {
   const initialValues: AuthSettingsFormValues = {
     sso_ldap_enabled: data?.sso_ldap_enabled ?? false,
     auth_mode: data?.auth_mode ?? 'local',
+    digital_signature_enabled: data?.digital_signature_enabled ?? false,
+    ocsp_enabled: Boolean(data?.pki_config?.ocsp_enabled),
     ldap_uri: (data?.sso_config?.ldap_uri as string) ?? '',
     bind_dn: (data?.sso_config?.bind_dn as string) ?? '',
     user_base_dn: (data?.sso_config?.user_base_dn as string) ?? '',
@@ -137,10 +174,21 @@ export function AdminSettingsPage() {
       }
     }
 
+    const pkiConfig: Record<string, unknown> = {
+      ocsp_enabled: values.ocsp_enabled,
+      require_cert_at_login: true,
+      require_cert_at_approval: true,
+      reject_expired: true,
+      reject_revoked: true,
+      allowed_eku: ['clientAuth', 'emailProtection'],
+    };
+
     const patch: TenantSettingsPatch = {
       sso_ldap_enabled: values.sso_ldap_enabled,
       auth_mode: values.auth_mode,
       sso_config: values.sso_ldap_enabled ? ssoConfig : undefined,
+      digital_signature_enabled: values.digital_signature_enabled,
+      pki_config: values.digital_signature_enabled ? pkiConfig : undefined,
     };
     if (values.sso_ldap_enabled && values.auth_mode === 'ldap') {
       patch.portal_password = values.portal_password?.trim() || undefined;
@@ -151,9 +199,32 @@ export function AdminSettingsPage() {
   const authMode = Form.useWatch('auth_mode', form) ?? initialValues.auth_mode;
   const ssoEnabled =
     Form.useWatch('sso_ldap_enabled', form) ?? initialValues.sso_ldap_enabled;
+  const pkiEnabled =
+    Form.useWatch('digital_signature_enabled', form) ??
+    initialValues.digital_signature_enabled;
   const ldapMigrationRequired =
     data?.ldap_migration_required ??
     (ssoEnabled && authMode === 'ldap' && !data?.sso_ldap_enabled);
+  const caUploaded = Boolean(data?.pki_config?.ca_certificate_uploaded);
+  const caSubjectDn = data?.pki_config?.ca_subject_dn as string | undefined;
+  const caFingerprint = data?.pki_config?.ca_fingerprint as string | undefined;
+  const caUploadedAt = data?.pki_config?.ca_uploaded_at as string | undefined;
+
+  const caUploadProps: UploadProps = {
+    accept: '.crt,.pem,.cer',
+    showUploadList: false,
+    beforeUpload: (file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result;
+        if (typeof text === 'string' && text.trim()) {
+          caUploadMutation.mutate(text);
+        }
+      };
+      reader.readAsText(file);
+      return false;
+    },
+  };
 
   return (
     <div>
@@ -179,6 +250,90 @@ export function AdminSettingsPage() {
           key={data?.tenant_id ?? 'loading'}
           onFinish={handleFinish}
         >
+          <Form.Item
+            name="digital_signature_enabled"
+            label={t('adminSettings.pkiEnabled')}
+            valuePropName="checked"
+            extra={t('adminSettings.pkiEnabledHint')}
+          >
+            <Switch />
+          </Form.Item>
+
+          {pkiEnabled ? (
+            <Alert
+              type="warning"
+              showIcon
+              message={t('adminSettings.pkiWarningTitle')}
+              description={t('adminSettings.pkiWarningDesc')}
+              style={{ marginBottom: 16 }}
+            />
+          ) : null}
+
+          {pkiEnabled ? (
+            <>
+              <Typography.Title level={5}>
+                {t('adminSettings.pkiSection')}
+              </Typography.Title>
+              <Typography.Paragraph type="secondary">
+                {t('adminSettings.caUploadHint')}
+              </Typography.Paragraph>
+              {caUploaded ? (
+                <Descriptions
+                  bordered
+                  size="small"
+                  column={1}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Descriptions.Item label={t('adminSettings.caSubject')}>
+                    {caSubjectDn ?? '—'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('adminSettings.caFingerprint')}>
+                    <Typography.Text code>{caFingerprint ?? '—'}</Typography.Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label={t('adminSettings.caUploadedAt')}>
+                    {caUploadedAt ?? '—'}
+                  </Descriptions.Item>
+                </Descriptions>
+              ) : (
+                <Alert
+                  type="info"
+                  showIcon
+                  message={t('adminSettings.caMissingTitle')}
+                  description={t('adminSettings.caMissingDesc')}
+                  style={{ marginBottom: 16 }}
+                />
+              )}
+              <Space style={{ marginBottom: 16 }}>
+                <Upload {...caUploadProps}>
+                  <Button
+                    icon={<UploadOutlined />}
+                    loading={caUploadMutation.isPending}
+                  >
+                    {caUploaded
+                      ? t('adminSettings.caReplace')
+                      : t('adminSettings.caUpload')}
+                  </Button>
+                </Upload>
+                {caUploaded ? (
+                  <Button
+                    danger
+                    loading={caRemoveMutation.isPending}
+                    onClick={() => caRemoveMutation.mutate()}
+                  >
+                    {t('adminSettings.caRemove')}
+                  </Button>
+                ) : null}
+              </Space>
+              <Form.Item
+                name="ocsp_enabled"
+                label={t('adminSettings.ocspEnabled')}
+                valuePropName="checked"
+              >
+                <Switch />
+              </Form.Item>
+            </>
+          ) : null}
+
           <Form.Item
             name="sso_ldap_enabled"
             label={t('adminSettings.ssoEnabled')}

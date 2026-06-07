@@ -42,6 +42,9 @@ class SessionData:
     tenant_id: str
     created_at: str
     expires_at: str
+    pki_required: bool = False
+    pki_verified: bool = False
+    cert_serial: str | None = None
 
 
 @lru_cache
@@ -54,10 +57,19 @@ def _session_key(session_id: str) -> str:
     return f"{SESSION_PREFIX}{session_id}"
 
 
-def create_session(user_id: uuid.UUID, tenant_id: uuid.UUID) -> tuple[str, int]:
+def create_session(
+    user_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    *,
+    pki_required: bool = False,
+    pki_verified: bool = False,
+    cert_serial: str | None = None,
+    ttl_seconds: int | None = None,
+) -> tuple[str, int]:
     """Create a session and return (session_id, ttl_seconds)."""
     settings = get_settings()
-    ttl_seconds = settings.session_ttl_hours * 3600
+    if ttl_seconds is None:
+        ttl_seconds = settings.session_ttl_hours * 3600
     session_id = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=ttl_seconds)
@@ -67,10 +79,29 @@ def create_session(user_id: uuid.UUID, tenant_id: uuid.UUID) -> tuple[str, int]:
         tenant_id=str(tenant_id),
         created_at=now.isoformat(),
         expires_at=expires_at.isoformat(),
+        pki_required=pki_required,
+        pki_verified=pki_verified if pki_required else True,
+        cert_serial=cert_serial,
     )
     client = get_redis_client()
     client.setex(_session_key(session_id), ttl_seconds, json.dumps(asdict(payload)))
     return session_id, ttl_seconds
+
+
+def update_session(session_id: str, **updates: Any) -> SessionData | None:
+    """Merge updates into an existing session and refresh TTL."""
+    session = get_session(session_id)
+    if session is None:
+        return None
+    data = asdict(session)
+    data.update(updates)
+    updated = SessionData(**data)
+    settings = get_settings()
+    ttl_seconds = settings.session_ttl_hours * 3600
+    get_redis_client().setex(
+        _session_key(session_id), ttl_seconds, json.dumps(asdict(updated))
+    )
+    return updated
 
 
 def get_session(session_id: str) -> SessionData | None:
@@ -79,7 +110,16 @@ def get_session(session_id: str) -> SessionData | None:
     if not raw:
         return None
     data: dict[str, Any] = json.loads(raw)
-    return SessionData(**data)
+    return SessionData(
+        session_id=data["session_id"],
+        user_id=data["user_id"],
+        tenant_id=data["tenant_id"],
+        created_at=data["created_at"],
+        expires_at=data["expires_at"],
+        pki_required=bool(data.get("pki_required", False)),
+        pki_verified=bool(data.get("pki_verified", not data.get("pki_required", False))),
+        cert_serial=data.get("cert_serial"),
+    )
 
 
 def delete_session(session_id: str) -> None:

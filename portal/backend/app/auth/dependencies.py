@@ -84,3 +84,14 @@ def require_tenant_admin(
             detail="Tenant administrator access required",
         )
     return user
+
+
+def require_platform_admin(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if user.system_role != SystemRole.PLATFORM_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform administrator access required",
+        )
+    return user

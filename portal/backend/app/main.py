@@ -21,7 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
+from app.api.pki import router as pki_router
 from app.api.sso import router as sso_router
+from app.api.platform import router as platform_router
 from app.api.tenants import router as tenants_router
 from app.config import get_settings
 
@@ -45,5 +47,7 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(pki_router)
 app.include_router(sso_router)
 app.include_router(tenants_router)
+app.include_router(platform_router)

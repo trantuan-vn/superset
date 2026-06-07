@@ -39,9 +39,10 @@ export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, isLoading } = useAuth();
+  const { login, logout, user, isAuthenticated, isLoading, pkiPending } = useAuth();
   const [form] = Form.useForm<LoginFormValues>();
   const [submitting, setSubmitting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const tenantSlug = Form.useWatch('tenant_slug', form) ?? 'demo-corp';
@@ -61,6 +62,13 @@ export function LoginPage() {
     }
   }, [searchParams, setSearchParams]);
 
+  useEffect(() => {
+    const tenantFromQuery = searchParams.get('tenant')?.trim();
+    if (tenantFromQuery) {
+      form.setFieldValue('tenant_slug', tenantFromQuery);
+    }
+  }, [form, searchParams]);
+
   const from =
     (location.state as { from?: string } | null)?.from ?? '/dashboard';
 
@@ -74,6 +82,63 @@ export function LoginPage() {
     return <Navigate to={from} replace />;
   }
 
+  const handleSignOutPending = async () => {
+    setSigningOut(true);
+    try {
+      await logout();
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
+  if (pkiPending && user) {
+    return (
+      <div className={styles.page}>
+        <section className={styles.brandPanel} aria-hidden={false}>
+          <div className={styles.brandContent}>
+            <span className={styles.logoMark}>P</span>
+            <Typography.Title level={2} className={styles.brandTitle}>
+              {t('app.name')}
+            </Typography.Title>
+            <Typography.Paragraph className={styles.brandTagline}>
+              {t('app.tagline')}
+            </Typography.Paragraph>
+          </div>
+        </section>
+
+        <section className={styles.formPanel}>
+          <div className={styles.formWrapper}>
+            <Typography.Title level={3}>{t('auth.loginTitle')}</Typography.Title>
+            <Alert
+              type="info"
+              showIcon
+              message={t('pki.pendingSessionTitle')}
+              description={t('pki.pendingSessionDesc', { name: user.display_name })}
+              className={styles.errorAlert}
+            />
+            <Button
+              type="primary"
+              block
+              size="large"
+              onClick={() => navigate('/login/pki', { replace: true, state: { from } })}
+            >
+              {t('pki.continueVerify')}
+            </Button>
+            <Button
+              block
+              size="large"
+              loading={signingOut}
+              onClick={() => void handleSignOutPending()}
+              style={{ marginTop: 8 }}
+            >
+              {t('pki.signOutAndLogin')}
+            </Button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   const handleSsoLogin = () => {
     const slug = form.getFieldValue('tenant_slug')?.trim() || 'demo-corp';
     window.location.href = ssoLoginUrl(slug);
@@ -83,12 +148,16 @@ export function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await login({
-        tenant_slug: values.tenant_slug.trim(),
+      const result = await login({
+        tenant_slug: values.tenant_slug.trim().toLowerCase(),
         username: values.username.trim(),
         password: values.password,
       });
-      navigate(from, { replace: true });
+      if (result.pki_pending) {
+        navigate('/login/pki', { replace: true, state: { from } });
+      } else {
+        navigate(from, { replace: true });
+      }
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : t('auth.loginError');

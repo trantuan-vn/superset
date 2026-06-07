@@ -52,6 +52,8 @@ class TenantResponse(BaseModel):
 class MeResponse(BaseModel):
     user: UserResponse
     tenant: TenantResponse
+    pki_pending: bool = False
+    cert_serial: str | None = None
 
 
 class MessageResponse(BaseModel):
@@ -65,7 +67,24 @@ class LoginOptionsResponse(BaseModel):
     auth_mode: str
     sso_primary: bool
     show_local_login: bool
+    pki_enabled: bool = False
     branding: TenantBrandingResponse | None = None
+
+
+class PkiChallengeResponse(BaseModel):
+    nonce: str
+    expires_in_seconds: int
+
+
+class PkiVerifyRequest(BaseModel):
+    certificate: str = Field(..., min_length=64, description="PEM-encoded X.509 certificate")
+    signature: str = Field(..., min_length=1, description="Base64 signature over nonce")
+
+
+class PkiVerifyResponse(BaseModel):
+    cert_serial: str
+    subject_dn: str
+    message: str = "PKI verification successful"
 
 
 class TenantSettingsResponse(BaseModel):
@@ -81,6 +100,48 @@ class TenantSettingsResponse(BaseModel):
     export_formats: list[str] | None = None
     download_token_ttl_hours: int
     branding: dict[str, Any] | None = None
+
+
+class PkiCaUploadRequest(BaseModel):
+    certificate: str = Field(
+        ...,
+        min_length=64,
+        description="PEM-encoded root CA certificate (root_ca.crt)",
+    )
+
+
+class PlatformTenantResponse(BaseModel):
+    id: str
+    slug: str
+    name: str
+    status: str
+    admin_count: int
+    pki_enabled: bool
+
+
+class TenantAdminResponse(BaseModel):
+    id: str
+    email: str
+    display_name: str
+
+
+class CreateTenantRequest(BaseModel):
+    slug: str = Field(..., min_length=2, max_length=64)
+    name: str = Field(..., min_length=1, max_length=255)
+    admin_email: str = Field(..., min_length=3, max_length=255)
+    admin_password: str = Field(..., min_length=8, max_length=256)
+    admin_display_name: str = Field(..., min_length=1, max_length=255)
+
+
+class CreateTenantAdminRequest(BaseModel):
+    admin_email: str = Field(..., min_length=3, max_length=255)
+    admin_password: str = Field(..., min_length=8, max_length=256)
+    admin_display_name: str = Field(..., min_length=1, max_length=255)
+
+
+class CreateTenantResponse(BaseModel):
+    tenant: PlatformTenantResponse
+    admin: TenantAdminResponse
 
 
 class TenantSettingsPatch(BaseModel):

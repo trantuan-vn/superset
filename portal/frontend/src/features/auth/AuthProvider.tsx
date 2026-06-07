@@ -60,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (payload: Parameters<typeof apiLogin>[0]) => {
       const result = await apiLogin(payload);
       queryClient.setQueryData(AUTH_QUERY_KEY, result);
+      return result;
     },
     [queryClient],
   );
@@ -77,17 +78,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refetch();
   }, [refetch]);
 
+  const pkiPending = Boolean(data?.pki_pending);
+  const isFullyAuthenticated = Boolean(data?.user) && !pkiPending;
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user: data?.user ?? null,
       tenant: data?.tenant ?? null,
       isLoading,
-      isAuthenticated: Boolean(data?.user),
+      isAuthenticated: isFullyAuthenticated,
+      pkiPending,
+      certSerial: data?.cert_serial ?? null,
       login,
       logout,
       refresh,
     }),
-    [data, isLoading, login, logout, refresh],
+    [data, isLoading, isFullyAuthenticated, pkiPending, login, logout, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

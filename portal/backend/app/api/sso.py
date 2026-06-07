@@ -72,6 +72,7 @@ def auth_login_options(
         auth_mode=options["auth_mode"],
         sso_primary=options["sso_primary"],
         show_local_login=options["show_local_login"],
+        pki_enabled=options.get("pki_enabled", False),
         branding=branding,
     )
 
@@ -120,6 +121,7 @@ def auth_sso_callback(
             status_code=302,
         )
 
-    response = RedirectResponse(url=f"{frontend}/dashboard", status_code=302)
+    next_path = "/login/pki" if result.pki_pending else "/dashboard"
+    response = RedirectResponse(url=f"{frontend}{next_path}", status_code=302)
     _set_session_cookie(response, result.session_id, result.ttl_seconds)
     return response

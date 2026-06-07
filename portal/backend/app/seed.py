@@ -26,6 +26,7 @@ from app.models.tenant import Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
 
 DEMO_TENANT_ID = uuid.UUID("a0000000-0000-4000-8000-000000000001")
+PLATFORM_TENANT_ID = uuid.UUID("a0000000-0000-4000-8000-000000000010")
 DEMO_PASSWORD = "Pass123!"
 
 DEMO_USERS: list[dict[str, str | SystemRole]] = [
@@ -97,8 +98,47 @@ def seed_demo_data() -> None:
                     )
                 )
 
+        platform = db.get(Tenant, PLATFORM_TENANT_ID)
+        if platform is None:
+            platform = Tenant(
+                id=PLATFORM_TENANT_ID,
+                slug="platform",
+                name="Platform Operations",
+            )
+            db.add(platform)
+            db.flush()
+
+        platform_settings = db.get(TenantSettings, PLATFORM_TENANT_ID)
+        if platform_settings is None:
+            platform_settings = TenantSettings(
+                tenant_id=PLATFORM_TENANT_ID,
+                branding={"app_name": "Portal — Platform"},
+            )
+            db.add(platform_settings)
+
+        platform_admin = db.scalar(
+            select(User).where(
+                User.tenant_id == PLATFORM_TENANT_ID,
+                User.username == "admin@platform",
+            )
+        )
+        if platform_admin is None:
+            db.add(
+                User(
+                    tenant_id=PLATFORM_TENANT_ID,
+                    username="admin@platform",
+                    email="admin@platform",
+                    display_name="Platform Administrator",
+                    password_hash=hash_password(DEMO_PASSWORD),
+                    system_role=SystemRole.PLATFORM_ADMIN,
+                    status=UserStatus.ACTIVE,
+                )
+            )
+
         db.commit()
-        print("Demo seed complete: demo-corp / Pass123!")
+        print(
+            "Demo seed complete: demo-corp / Pass123! | platform admin: platform / admin@platform / Pass123!"
+        )
     finally:
         db.close()
 

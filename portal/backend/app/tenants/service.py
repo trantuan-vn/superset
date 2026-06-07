@@ -24,6 +24,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.audit.service import write_audit_log
+from app.auth.pki_ca import (
+    mask_pki_config_for_api,
+    pki_has_trusted_ca,
+    remove_ca_from_pki_config,
+    store_ca_in_pki_config,
+)
+from app.auth.pki_verify import PkiVerifyError
 from app.auth.secrets import mask_secret_value, resolve_secret_ref
 from app.auth.service import AuthError
 from app.models.tenant import AuthMode, TenantSettings
@@ -95,7 +102,7 @@ def settings_to_response(
         "ldap_migration_required": migration_required,
         "sso_config": _mask_sso_config(settings.sso_config),
         "digital_signature_enabled": settings.digital_signature_enabled,
-        "pki_config": settings.pki_config,
+        "pki_config": mask_pki_config_for_api(settings.pki_config),
         "ai_enabled": settings.ai_enabled,
         "ai_config": settings.ai_config,
         "export_formats": settings.export_formats,
@@ -123,7 +130,13 @@ def update_tenant_settings(
         settings.auth_mode = AuthMode(patch["auth_mode"])
 
     if "digital_signature_enabled" in patch:
-        settings.digital_signature_enabled = bool(patch["digital_signature_enabled"])
+        enabling = bool(patch["digital_signature_enabled"])
+        if enabling and not pki_has_trusted_ca(settings.pki_config):
+            raise AuthError(
+                "Upload a root CA certificate before enabling PKI",
+                status_code=400,
+            )
+        settings.digital_signature_enabled = enabling
 
     if "ai_enabled" in patch:
         settings.ai_enabled = bool(patch["ai_enabled"])
@@ -141,8 +154,19 @@ def update_tenant_settings(
                 merged[key] = value
         settings.sso_config = merged
 
-    if "pki_config" in patch:
-        settings.pki_config = patch["pki_config"]
+    if "pki_config" in patch and patch["pki_config"] is not None:
+        merged_pki = copy.deepcopy(settings.pki_config or {})
+        for key, value in patch["pki_config"].items():
+            if key in (
+                "ca_certificate_pem",
+                "ca_subject_dn",
+                "ca_fingerprint",
+                "ca_uploaded_at",
+            ):
+                continue
+            if value is not None:
+                merged_pki[key] = value
+        settings.pki_config = merged_pki
 
     if "ai_config" in patch:
         settings.ai_config = patch["ai_config"]
@@ -191,7 +215,138 @@ def update_tenant_settings(
         payload={
             "sso_ldap_enabled": settings.sso_ldap_enabled,
             "auth_mode": settings.auth_mode.value,
+            "digital_signature_enabled": settings.digital_signature_enabled,
         },
+        ip_address=ip_address,
+    )
+    return settings
+
+
+def upload_tenant_ca_certificate(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    actor: User,
+    certificate_pem: str,
+    ip_address: str | None = None,
+) -> TenantSettings:
+    """Store tenant root CA PEM in tenant_settings.pki_config."""
+    settings = get_tenant_settings(db, tenant_id)
+    try:
+        settings.pki_config = store_ca_in_pki_config(
+            settings.pki_config, certificate_pem=certificate_pem
+        )
+    except PkiVerifyError as exc:
+        raise AuthError(str(exc), status_code=400) from exc
+
+    db.commit()
+    db.refresh(settings)
+
+    write_audit_log(
+        db,
+        tenant_id=tenant_id,
+        action="PKI_CA_UPLOADED",
+        entity_type="tenant_settings",
+        entity_id=str(tenant_id),
+        actor_id=actor.id,
+        payload={
+            "ca_fingerprint": settings.pki_config.get("ca_fingerprint"),
+            "ca_subject_dn": settings.pki_config.get("ca_subject_dn"),
+        },
+        ip_address=ip_address,
+    )
+    return settings
+
+
+def remove_tenant_ca_certificate(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    actor: User,
+    ip_address: str | None = None,
+) -> TenantSettings:
+    """Remove uploaded root CA; disables PKI if no other trust source exists."""
+    settings = get_tenant_settings(db, tenant_id)
+    settings.pki_config = remove_ca_from_pki_config(settings.pki_config)
+    if settings.digital_signature_enabled and not pki_has_trusted_ca(settings.pki_config):
+        settings.digital_signature_enabled = False
+
+    db.commit()
+    db.refresh(settings)
+
+    write_audit_log(
+        db,
+        tenant_id=tenant_id,
+        action="PKI_CA_REMOVED",
+        entity_type="tenant_settings",
+        entity_id=str(tenant_id),
+        actor_id=actor.id,
+        payload={},
+        ip_address=ip_address,
+    )
+    return settings
+
+
+def upload_tenant_ca_certificate(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    actor: User,
+    certificate_pem: str,
+    ip_address: str | None = None,
+) -> TenantSettings:
+    """Store tenant root CA PEM in tenant_settings.pki_config."""
+    settings = get_tenant_settings(db, tenant_id)
+    try:
+        settings.pki_config = store_ca_in_pki_config(
+            settings.pki_config, certificate_pem=certificate_pem
+        )
+    except PkiVerifyError as exc:
+        raise AuthError(str(exc), status_code=400) from exc
+
+    db.commit()
+    db.refresh(settings)
+
+    write_audit_log(
+        db,
+        tenant_id=tenant_id,
+        action="PKI_CA_UPLOADED",
+        entity_type="tenant_settings",
+        entity_id=str(tenant_id),
+        actor_id=actor.id,
+        payload={
+            "ca_fingerprint": settings.pki_config.get("ca_fingerprint"),
+            "ca_subject_dn": settings.pki_config.get("ca_subject_dn"),
+        },
+        ip_address=ip_address,
+    )
+    return settings
+
+
+def remove_tenant_ca_certificate(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    actor: User,
+    ip_address: str | None = None,
+) -> TenantSettings:
+    """Remove uploaded root CA; disables PKI if no other trust source exists."""
+    settings = get_tenant_settings(db, tenant_id)
+    settings.pki_config = remove_ca_from_pki_config(settings.pki_config)
+    if settings.digital_signature_enabled and not pki_has_trusted_ca(settings.pki_config):
+        settings.digital_signature_enabled = False
+
+    db.commit()
+    db.refresh(settings)
+
+    write_audit_log(
+        db,
+        tenant_id=tenant_id,
+        action="PKI_CA_REMOVED",
+        entity_type="tenant_settings",
+        entity_id=str(tenant_id),
+        actor_id=actor.id,
+        payload={},
         ip_address=ip_address,
     )
     return settings
