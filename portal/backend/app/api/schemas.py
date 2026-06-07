@@ -257,6 +257,66 @@ class McpTokenResponse(BaseModel):
     superset_username: str
 
 
+class TemplateResponse(BaseModel):
+    id: str
+    tenant_id: str
+    name: str
+    description: str | None = None
+    sql_snapshot: str
+    status: str
+    share_mode: str | None = None
+    share_scope_version: int = 0
+    reject_comment: str | None = None
+    created_by: str
+    created_by_name: str | None = None
+    published_by: str | None = None
+    superset_dashboard_id: int | None = None
+    superset_dataset_id: int | None = None
+    submitted_at: str | None = None
+    published_at: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class CreateTemplateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    sql_snapshot: str = Field(default="")
+
+
+class UpdateTemplateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    sql_snapshot: str | None = None
+
+
+class TemplateRejectRequest(BaseModel):
+    comment: str = Field(..., min_length=1, max_length=4000)
+
+
+class TemplateApproveRequest(BaseModel):
+    certificate: str | None = Field(default=None, min_length=64)
+    signature: str | None = Field(default=None, min_length=1)
+
+
+class TemplatePreviewRequest(BaseModel):
+    sql: str | None = None
+
+
+class TemplatePreviewResponse(BaseModel):
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    row_count: int
+    truncated: bool
+    mock: bool = False
+
+
+class PkiStepUpChallengeResponse(BaseModel):
+    nonce: str
+    expires_in_seconds: int
+    action: str
+
+
 def branding_from_json(raw: dict[str, Any] | None) -> TenantBrandingResponse | None:
     if not raw:
         return None

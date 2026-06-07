@@ -26,6 +26,7 @@ import { AdminSettingsPage } from '@/pages/AdminSettingsPage';
 import { AdminUsersPage } from '@/pages/AdminUsersPage';
 import { PlatformTenantsPage } from '@/pages/PlatformTenantsPage';
 import { TemplateStudioPage } from '@/features/templates/TemplateStudioPage';
+import { CnttApprovalsPage } from '@/pages/CnttApprovalsPage';
 import { CnttTemplatesPage } from '@/pages/CnttTemplatesPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { HealthUiPage } from '@/pages/HealthUiPage';
@@ -90,6 +91,14 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute route="/cntt/templates">
             <TemplateStudioPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'cntt/approvals',
+        element: (
+          <RoleRoute route="/cntt/approvals">
+            <CnttApprovalsPage />
           </RoleRoute>
         ),
       },

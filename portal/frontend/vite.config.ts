@@ -40,6 +40,14 @@ export default defineConfig({
         target: process.env.VITE_API_URL ?? 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/ai': {
+        target: process.env.VITE_API_URL ?? 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/templates': {
+        target: process.env.VITE_API_URL ?? 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
   build: {

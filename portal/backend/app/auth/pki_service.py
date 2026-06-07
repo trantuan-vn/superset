@@ -45,6 +45,7 @@ from app.models.user import User
 from app.models.user_certificate import UserCertificate
 
 PKI_CHALLENGE_PREFIX = "portal:pki_challenge:"
+PKI_STEPUP_PREFIX = "portal:pki_stepup:"
 PKI_CHALLENGE_TTL = 300
 
 
@@ -86,6 +87,79 @@ def reconcile_session_pki_with_tenant(
         )
         return updated or session
     return session
+
+
+def _stepup_key(session_id: str, action: str) -> str:
+    return f"{PKI_STEPUP_PREFIX}{session_id}:{action}"
+
+
+def create_pki_stepup_challenge(session: SessionData, action: str) -> PkiChallengeResult:
+    """Issue a one-time nonce for approval step-up signing."""
+    nonce = secrets.token_urlsafe(32)
+    payload = json.dumps({"nonce": nonce, "session_id": session.session_id, "action": action})
+    get_redis_client().setex(
+        _stepup_key(session.session_id, action),
+        PKI_CHALLENGE_TTL,
+        payload,
+    )
+    return PkiChallengeResult(nonce=nonce, expires_in_seconds=PKI_CHALLENGE_TTL)
+
+
+def _consume_stepup_challenge(session_id: str, action: str) -> str:
+    key = _stepup_key(session_id, action)
+    client = get_redis_client()
+    raw = client.get(key)
+    if not raw:
+        raise AuthError("Challenge expired or not found", status_code=400)
+    client.delete(key)
+    data = json.loads(raw)
+    return str(data["nonce"])
+
+
+def verify_pki_step_up(
+    db: Session,
+    *,
+    session: SessionData,
+    user: User,
+    settings: TenantSettings,
+    action: str,
+    certificate_pem: str,
+    signature: str,
+    ip_address: str | None = None,
+) -> PkiVerifyResult:
+    """Verify a signed step-up challenge for approval actions."""
+    pki_config = settings.pki_config or {}
+    nonce = _consume_stepup_challenge(session.session_id, action)
+
+    try:
+        verified = parse_and_verify_certificate(certificate_pem, pki_config)
+        cert = x509.load_pem_x509_certificate(certificate_pem.encode("utf-8"))
+        verify_signature(cert, nonce, signature)
+    except PkiVerifyError as exc:
+        write_audit_log(
+            db,
+            tenant_id=user.tenant_id,
+            action="AUTH_PKI_FAILED",
+            entity_type="user",
+            entity_id=str(user.id),
+            actor_id=user.id,
+            payload={"reason": str(exc), "action": action},
+            ip_address=ip_address,
+        )
+        raise AuthError(str(exc), status_code=403) from exc
+
+    if not certificate_matches_user(
+        verified, username=user.username, email=user.email
+    ):
+        raise AuthError(
+            "Certificate does not match the authenticated user",
+            status_code=403,
+        )
+
+    return PkiVerifyResult(
+        cert_serial=verified.serial_number,
+        subject_dn=verified.subject_dn,
+    )
 
 
 def create_pki_challenge(session: SessionData) -> PkiChallengeResult:

@@ -16,7 +16,8 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Alert,
@@ -25,16 +26,32 @@ import {
   Input,
   Modal,
   Space,
-  Tag,
+  Steps,
+  Table,
   Typography,
   message,
 } from 'antd';
 import { useTranslation } from 'react-i18next';
 
+import { ApiError } from '@/api/templates';
+import {
+  createTemplate,
+  fetchTemplate,
+  previewTemplate,
+  submitTemplate,
+  updateTemplate,
+  type ExportTemplate,
+  type TemplatePreviewResult,
+} from '@/api/templates';
+import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { PageHeader } from '@/components/PageHeader';
+import { StatusBadge } from '@/components/StatusBadge';
 import { AiAssistantPanel } from '@/features/templates/AiAssistantPanel';
 import styles from '@/features/templates/TemplateStudioPage.module.css';
 import { useAuth } from '@/features/auth/useAuth';
+
+const DEFAULT_SQL =
+  "SELECT *\nFROM portal_export_data\nWHERE tenant_id = '{{ current_user_tenant() }}'\nLIMIT 100";
 
 function sqlDiffSummary(before: string, after: string): string {
   const beforeLines = before.trim().split('\n').length;
@@ -42,19 +59,50 @@ function sqlDiffSummary(before: string, after: string): string {
   return `${beforeLines} → ${afterLines}`;
 }
 
+function statusStepIndex(status: ExportTemplate['status']): number {
+  switch (status) {
+    case 'draft':
+      return 0;
+    case 'review':
+      return 1;
+    case 'published':
+      return 2;
+    default:
+      return 0;
+  }
+}
+
 export function TemplateStudioPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
-  const { tenant } = useAuth();
-  const [sql, setSql] = useState(
-    'SELECT *\nFROM portal_export_data\nWHERE tenant_id = \'{{ current_user_tenant() }}\'\nLIMIT 100',
-  );
+  const { tenant, user } = useAuth();
+  const isNew = id === 'new' || !id;
+
+  const [name, setName] = useState('');
+  const [sql, setSql] = useState(DEFAULT_SQL);
   const [pendingSql, setPendingSql] = useState<string | null>(null);
   const [showDiff, setShowDiff] = useState(false);
+  const [preview, setPreview] = useState<TemplatePreviewResult | null>(null);
 
+  const templateQuery = useQuery({
+    queryKey: ['templates', id],
+    queryFn: () => fetchTemplate(id as string),
+    enabled: !isNew && Boolean(id),
+  });
+
+  const template = templateQuery.data;
   const aiEnabled = tenant?.ai_enabled ?? false;
-  const isNew = id === 'new' || !id;
+  const isEditable = isNew || template?.status === 'draft';
+  const isOwner = isNew || template?.created_by === user?.id;
+
+  useEffect(() => {
+    if (template) {
+      setName(template.name);
+      setSql(template.sql_snapshot || DEFAULT_SQL);
+    }
+  }, [template]);
 
   const breadcrumb = useMemo(
     () => [
@@ -62,11 +110,59 @@ export function TemplateStudioPage() {
       {
         title: isNew
           ? t('templateStudio.newTitle')
-          : t('templateStudio.editTitle'),
+          : template?.name ?? t('templateStudio.editTitle'),
       },
     ],
-    [isNew, t],
+    [isNew, t, template?.name],
   );
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload = { name: name.trim(), sql_snapshot: sql.trim() };
+      if (isNew) {
+        return createTemplate(payload);
+      }
+      return updateTemplate(id as string, payload);
+    },
+    onSuccess: (saved) => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      message.success(t('templateStudio.saved'));
+      if (isNew) {
+        navigate(`/cntt/templates/${saved.id}`, { replace: true });
+      }
+    },
+    onError: (err) => {
+      const text =
+        err instanceof ApiError ? err.message : t('templateStudio.saveFailed');
+      message.error(text);
+    },
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: () => submitTemplate(id as string),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['templates'] });
+      queryClient.invalidateQueries({ queryKey: ['templates', id] });
+      message.success(t('templateStudio.submitted'));
+    },
+    onError: (err) => {
+      const text =
+        err instanceof ApiError ? err.message : t('templateStudio.submitFailed');
+      message.error(text);
+    },
+  });
+
+  const previewMutation = useMutation({
+    mutationFn: () => previewTemplate(id as string, sql.trim()),
+    onSuccess: (result) => {
+      setPreview(result);
+    },
+    onError: (err) => {
+      const text =
+        err instanceof ApiError ? err.message : t('templateStudio.previewFailed');
+      message.error(text);
+    },
+  });
 
   const requestInsertSql = (nextSql: string) => {
     if (!sql.trim()) {
@@ -88,19 +184,70 @@ export function TemplateStudioPage() {
     setShowDiff(false);
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
+    if (!name.trim()) {
+      message.warning(t('templateStudio.nameRequired'));
+      return;
+    }
     if (!sql.trim()) {
       message.warning(t('templateStudio.sqlRequired'));
       return;
     }
-    message.success(t('templateStudio.draftSavedLocal'));
+    await saveMutation.mutateAsync();
   };
+
+  const handleSubmitReview = async () => {
+    if (isNew) {
+      message.warning(t('templateStudio.saveBeforeSubmit'));
+      return;
+    }
+    if (!isOwner) {
+      message.warning(t('templateStudio.ownerOnlySubmit'));
+      return;
+    }
+    await submitMutation.mutateAsync();
+  };
+
+  const handlePreview = async () => {
+    if (isNew) {
+      message.warning(t('templateStudio.saveBeforePreview'));
+      return;
+    }
+    await previewMutation.mutateAsync();
+  };
+
+  if (!isNew && templateQuery.isLoading) {
+    return <LoadingSkeleton variant="form" rows={8} />;
+  }
+
+  if (!isNew && templateQuery.isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        message={t('templateStudio.loadFailed')}
+        action={
+          <Button onClick={() => navigate('/cntt/templates')}>
+            {t('templateStudio.backToList')}
+          </Button>
+        }
+      />
+    );
+  }
+
+  const previewColumns =
+    preview?.columns.map((column) => ({
+      title: column,
+      dataIndex: column,
+      key: column,
+      ellipsis: true,
+    })) ?? [];
 
   return (
     <div className={styles.studio}>
       <PageHeader
         title={
-          isNew ? t('templateStudio.newTitle') : t('templateStudio.editTitle')
+          isNew ? t('templateStudio.newTitle') : template?.name ?? t('templateStudio.editTitle')
         }
         breadcrumb={breadcrumb}
         extra={
@@ -110,12 +257,38 @@ export function TemplateStudioPage() {
         }
       />
 
-      <Alert
-        type="info"
-        showIcon
-        message={t('templateStudio.phase7HintTitle')}
-        description={t('templateStudio.phase7HintDesc')}
-      />
+      {template?.reject_comment ? (
+        <Alert
+          type="warning"
+          showIcon
+          message={t('templateStudio.rejectTitle')}
+          description={template.reject_comment}
+        />
+      ) : null}
+
+      {!isNew && template ? (
+        <Card size="small">
+          <Steps
+            size="small"
+            current={statusStepIndex(template.status)}
+            items={[
+              { title: t('templateStudio.statusDraft') },
+              { title: t('templateStudio.statusReview') },
+              { title: t('templateStudio.statusPublished') },
+            ]}
+          />
+        </Card>
+      ) : null}
+
+      <Card size="small">
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={t('templateStudio.namePlaceholder')}
+          disabled={!isEditable}
+          aria-label={t('templateStudio.nameLabel')}
+        />
+      </Card>
 
       <div className={styles.split}>
         <Card className={styles.panel} title={t('templateStudio.aiPanel')}>
@@ -132,10 +305,44 @@ export function TemplateStudioPage() {
             value={sql}
             onChange={(event) => setSql(event.target.value)}
             rows={18}
+            disabled={!isEditable}
             aria-label={t('templateStudio.sqlLabel')}
           />
         </Card>
       </div>
+
+      <Card title={t('templateStudio.previewTitle')}>
+        <Space style={{ marginBottom: 12 }}>
+          <Button
+            onClick={handlePreview}
+            loading={previewMutation.isPending}
+            disabled={isNew}
+          >
+            {t('templateStudio.runPreview')}
+          </Button>
+          {preview?.mock ? (
+            <Typography.Text type="secondary">
+              {t('templateStudio.previewMockHint')}
+            </Typography.Text>
+          ) : null}
+        </Space>
+        {preview ? (
+          <Table
+            size="small"
+            columns={previewColumns}
+            dataSource={preview.rows.map((row, index) => ({
+              ...row,
+              key: String(index),
+            }))}
+            pagination={false}
+            scroll={{ x: true }}
+          />
+        ) : (
+          <Typography.Text type="secondary">
+            {t('templateStudio.previewEmpty')}
+          </Typography.Text>
+        )}
+      </Card>
 
       <Card>
         <div className={styles.footer}>
@@ -143,18 +350,26 @@ export function TemplateStudioPage() {
             <Typography.Text type="secondary">
               {t('templateStudio.statusLabel')}
             </Typography.Text>
-            <Tag color="default">{t('templateStudio.statusDraft')}</Tag>
+            <StatusBadge status={template?.status ?? 'draft'} />
           </Space>
           <Space>
-            <Button onClick={handleSaveDraft}>{t('templateStudio.saveDraft')}</Button>
-            <Button type="primary" disabled>
+            <Button
+              onClick={handleSaveDraft}
+              loading={saveMutation.isPending}
+              disabled={!isEditable || !isOwner}
+            >
+              {t('templateStudio.saveDraft')}
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleSubmitReview}
+              loading={submitMutation.isPending}
+              disabled={!isEditable || !isOwner || template?.status !== 'draft'}
+            >
               {t('templateStudio.submitReview')}
             </Button>
           </Space>
         </div>
-        <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-          {t('templateStudio.previewComingPhase8')}
-        </Typography.Paragraph>
       </Card>
 
       <Modal

@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
+from app.models.export_template import ExportTemplate, TemplateShareMode, TemplateStatus
 from app.models.audit import AuditLog
 from app.models.department import Department, DepartmentStatus, DeptRole, UserDeptRole
 from app.models.tenant import Tenant, TenantSettings
@@ -29,6 +30,9 @@ from app.models.provisioning_sync_log import (
 from app.models.user_certificate import UserCertificate
 
 __all__ = [
+    "ExportTemplate",
+    "TemplateShareMode",
+    "TemplateStatus",
     "AuditLog",
     "AuthProvider",
     "Department",
