@@ -20,7 +20,10 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 
 import { AppShell } from '@/app/AppShell';
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute';
+import { RoleRoute } from '@/features/auth/RoleRoute';
+import { AdminDepartmentsPage } from '@/pages/AdminDepartmentsPage';
 import { AdminSettingsPage } from '@/pages/AdminSettingsPage';
+import { AdminUsersPage } from '@/pages/AdminUsersPage';
 import { PlatformTenantsPage } from '@/pages/PlatformTenantsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { HealthUiPage } from '@/pages/HealthUiPage';
@@ -40,8 +43,38 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', element: <DashboardPage /> },
-      { path: 'admin/settings', element: <AdminSettingsPage /> },
-      { path: 'platform/tenants', element: <PlatformTenantsPage /> },
+      {
+        path: 'admin/settings',
+        element: (
+          <RoleRoute route="/admin/settings">
+            <AdminSettingsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'admin/departments',
+        element: (
+          <RoleRoute route="/admin/departments">
+            <AdminDepartmentsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'admin/users',
+        element: (
+          <RoleRoute route="/admin/users">
+            <AdminUsersPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'platform/tenants',
+        element: (
+          <RoleRoute route="/platform/tenants">
+            <PlatformTenantsPage />
+          </RoleRoute>
+        ),
+      },
       { path: 'health-ui', element: <HealthUiPage /> },
     ],
   },

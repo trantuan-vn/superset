@@ -1,8 +1,8 @@
-# Spec Portal Kết xuất Dữ liệu v1.3
+# Spec Portal Kết xuất Dữ liệu v1.4
 
 > **Mục đích:** Đặc tả triển khai **tuần tự, có Gate kiểm duyệt** cho Portal quy trình kết xuất trên Apache Superset.  
 > **Nguyên tắc:** Mỗi Phase = **Backend + Frontend + Gate** → OK mới sang Phase tiếp theo.  
-> **Trạng thái:** Draft v1.3 — UI/UX enterprise (§14), auth test (§12), K8s LDAP/PKI (§13), **tổ chức multi-tenant** (§2.2).
+> **Trạng thái:** v1.4 — Phase 0–4 đã triển khai (Gate 4); UI/UX (§14), auth test (§12), K8s LDAP/PKI (§13), multi-tenant (§2.2), **phân quyền role × phòng ban (§11.1)**.
 
 ### Cách đọc tài liệu
 
@@ -10,6 +10,7 @@
 |---|---|
 | Bắt đầu triển khai | §3 bảng tóm tắt → §7 Phase 0 |
 | **Onboard doanh nghiệp / PKI theo công ty** | **§2.2** |
+| **Phân quyền menu / API / phòng ban** | **§11.1**, §11.4 |
 | Thiết kế giao diện | §14 (bắt buộc từ Phase 0) |
 | Schema DB | §5 |
 | Test LDAP/PKI local | §12 |
@@ -144,10 +145,16 @@ Portal phục vụ **nhiều công ty độc lập**. Mỗi công ty là một *
 
 **Seed dev (tham chiếu):**
 
-| Tenant slug | User | Mật khẩu | Role |
-|---|---|---|---|
-| `platform` | `admin@platform` | `Pass123!` | `platform_admin` |
-| `demo-corp` | `admin@demo-corp` | `Pass123!` | `tenant_admin` |
+| Tenant slug | User | Mật khẩu | `system_role` | Ghi chú |
+|---|---|---|---|---|
+| `platform` | `admin@platform` | `Pass123!` | `platform_admin` | Quản trị nền tảng |
+| `demo-corp` | `admin@demo-corp` | `Pass123!` | `tenant_admin` | Quản trị doanh nghiệp |
+| `demo-corp` | `cntt.cv@demo-corp` | `Pass123!` | `cntt_chuyenvien` | Chuyên viên thiết kế mẫu |
+| `demo-corp` | `cntt.ld@demo-corp` | `Pass123!` | `cntt_lanhdao` | Lãnh đạo duyệt mẫu (+ IAM) |
+| `demo-corp` | `ketoan.cv@demo-corp` | `Pass123!` | `dept_user` | NV phòng KETOAN — `chuyenvien` |
+| `demo-corp` | `ketoan.ld@demo-corp` | `Pass123!` | `dept_user` | NV phòng KETOAN — `lanhdao` |
+
+Phòng ban seed: `KETOAN` / *Phòng Kế toán* (tenant `demo-corp`). UI hiển thị **Loại tài khoản** (không dùng nhãn nội bộ `CNTT` — xem §11.4).
 
 #### 2.2.2. Sơ đồ phân tầng
 
@@ -290,7 +297,7 @@ Phase 12: Audit, hardening & production GA
 | 1 | Login local | Session, `/auth/*` | Login page, dashboard shell | Multi-tenant session |
 | 2 | SSO/LDAP | Auth adapters | SSO button, settings form | §12 LDAP/OIDC |
 | 3 | PKI login | Challenge/verify | Cert wizard step | 100% user cert khi bật |
-| 4 | Dept động | CRUD dept, roles | Admin dept/user tables | Dept isolation |
+| 4 | Dept động | CRUD dept, roles, policy | Admin dept/user tables, 403 guard | Gate 4 + §11.1 |
 | 5 | Provision SS | Role sync | — (status toast) | Role auto trên Superset |
 | 6 | RLS | Macro Jinja sync | — | Query isolation |
 | 7 | AI | MCP orchestrator | AI prompt panel + SQL editor | AI off = manual OK |
@@ -320,9 +327,9 @@ Phase 0  App shell + tokens
 portal/
 ├── backend/                 # FastAPI hoặc Flask
 │   ├── app/
-│   │   ├── auth/            # Phase 1–3
+│   │   ├── auth/            # Phase 1–3; policy.py Phase 4
 │   │   ├── tenants/
-│   │   ├── departments/
+│   │   ├── departments/     # Phase 4 — service, events
 │   │   ├── provisioning/    # Phase 5–6
 │   │   ├── templates/       # Phase 8–9
 │   │   ├── transactions/    # Phase 10–11
@@ -366,6 +373,21 @@ Superset giữ nguyên trong repo hiện tại (`superset/`, `helm/my-values.pro
 | Ingress riêng Portal | 1 | `portal.your-co.com` |
 | Auth test stack (dev) | 2–3 | §12 — `portal/docker/docker-compose.auth-test.yml` |
 | Vault / K8s Secrets | 2+ | SSO secret, AI key, CA trust store |
+
+### 4.3. Reverse proxy Portal Web (Phase 4+)
+
+Container `portal-web` (nginx, port **3000**) proxy các prefix API tới `portal-api:8000`. **Bắt buộc** khai báo mọi prefix backend mới — nếu thiếu, browser nhận `index.html` thay JSON.
+
+| Prefix | Phase | File cấu hình |
+|---|---|---|
+| `/health` | 0 | `portal/docker/nginx.conf`, `portal/frontend/vite.config.ts` |
+| `/auth/` | 1 | ↑ |
+| `/tenants/` | 2 | ↑ |
+| `/platform/` | 3 | ↑ |
+| `/departments` | 4 | ↑ |
+| `/users` | 4 | ↑ |
+
+Dev Vite (port **5173**): cùng danh sách proxy trong `portal/frontend/vite.config.ts`.
 
 ---
 
@@ -474,7 +496,10 @@ tenants ──1:1── tenant_settings
 | `department_id` | UUID FK | |
 | `role` | ENUM | `chuyenvien`, `lanhdao` |
 
-> Một user CNTT có thể **không** có bản ghi ở đây (dùng `system_role`). User ban NV có thể thuộc 1+ dept.
+> **Policy Phase 4 (đã triển khai):**
+> - User `cntt_*` / `tenant_admin` **không** có bản ghi `user_dept_roles` — quyền theo `system_role`.
+> - User `dept_user` **bắt buộc** gán phòng ban để truy cập workflow phòng ban (§11.1); **một user chỉ thuộc một phòng ban** (unique `user_id` + một `department_id` active).
+> - Spec gốc ghi dept_user có thể thuộc 1+ dept — **Phase 4 chọn 1 dept/user** để đơn giản RLS Phase 6; nếu đổi policy cần sửa §11.4 và migration.
 
 ### 5.9. Bảng `export_templates` (Phase 8)
 
@@ -707,23 +732,39 @@ t_{tenant_slug}_d_{dept_code}_ld   # Ban NV lãnh đạo
 
 ### Phase 4: Phòng ban động + Gán vai trò User
 
-**Mục tiêu:** CRUD phòng ban + gán user; UI admin chuyên nghiệp.
+**Mục tiêu:** CRUD phòng ban + gán user; UI admin chuyên nghiệp; phân quyền IAM theo §11.1.
 
 | Lớp | Phạm vi |
 |---|---|
-| **Backend** | CRUD `departments`, `user_dept_roles`, event `DepartmentCreated` |
-| **Frontend** | **Admin → Phòng ban** (DataTable + drawer form), **Admin → Người dùng** (gán dept/role) |
-| **Schema** | `departments`, `user_dept_roles` |
+| **Backend** | CRUD `departments`, `user_dept_roles`, event `DepartmentCreated`, `app/auth/policy.py` |
+| **Frontend** | **Admin → Phòng ban** (DataTable + drawer), **Admin → Người dùng** (CRUD + gán dept/role), `RoleRoute` + trang 403 |
+| **Schema** | Migration `0006_departments` — bảng `departments`, `user_dept_roles` |
 
 **Deliverables:**
-- [ ] API dept + user assignment
-- [ ] **UI:** Table sort/filter/search, badge trạng thái `active/inactive`
-- [ ] **UI:** Confirm modal khi deactivate dept
-- [ ] Policy: 1 user / 1 dept (document rõ nếu khác)
+- [x] API dept + user assignment (`/departments`, `/users`, `/users/{id}/dept-roles`)
+- [x] **UI:** Table sort/filter/search, badge trạng thái `active/inactive`
+- [x] **UI:** Confirm modal khi deactivate dept / user
+- [x] Policy: **1 `dept_user` / 1 phòng ban** (document §5.8)
+- [x] `/auth/me` trả `user.departments[]` (code, name, role)
+- [x] Ma trận phân quyền backend + frontend (§11.1, §11.4)
+- [x] Nginx/Vite proxy `/departments`, `/users` (§4.3)
 
-**Gate 4:** CRUD OK; `/auth/me` phản ánh dept; UI empty state khi chưa có dept.
+**File triển khai (tham chiếu):**
 
-**Phụ thuộc:** Gate 3
+| Thành phần | Đường dẫn |
+|---|---|
+| Models | `portal/backend/app/models/department.py` |
+| Service + event | `portal/backend/app/departments/service.py`, `events.py` |
+| Policy | `portal/backend/app/auth/policy.py`, `dependencies.py` |
+| API | `portal/backend/app/api/departments.py`, `users.py` |
+| Migration | `portal/backend/migrations/versions/2026_06_07_0006_departments.py` |
+| UI | `portal/frontend/src/pages/AdminDepartmentsPage.tsx`, `AdminUsersPage.tsx` |
+| Route guard | `portal/frontend/src/features/auth/permissions.ts`, `RoleRoute.tsx` |
+| Tests | `portal/backend/tests/test_departments.py`, `test_policy.py` |
+
+**Gate 4:** CRUD OK; `/auth/me` phản ánh dept; UI empty state khi chưa có dept; URL trái quyền → 403; `cntt_lanhdao` không sửa `tenant_admin`.
+
+**Phụ thuộc:** Gate 3 (demo tenant có thể bỏ qua SSO/PKI — xem §11.4)
 
 ---
 
@@ -961,18 +1002,88 @@ Body `POST /platform/tenants` (ví dụ):
 }
 ```
 
-### 8.3. Tenant admin (Phase 2–4)
+### 8.3. Tenant admin & IAM (Phase 2–4)
 
-| Method | Path | Role | Mô tả |
+#### 8.3.1. Cài đặt tenant — chỉ `tenant_admin`
+
+| Method | Path | Capability | Mô tả |
 |---|---|---|---|
-| GET/PATCH | `/tenants/{id}/settings` | `tenant_admin` | SSO, PKI flags, AI config |
-| POST | `/tenants/{id}/settings/pki/ca-certificate` | `tenant_admin` | Upload `root_ca.crt` (PEM body) |
-| DELETE | `/tenants/{id}/settings/pki/ca-certificate` | `tenant_admin` | Xóa CA đã upload |
-| CRUD | `/departments` | 4 | |
-| CRUD | `/users` | 4 | |
-| POST | `/users/{id}/dept-roles` | 4 | Gán dept role |
+| GET/PATCH | `/tenants/{id}/settings` | `tenant.settings` | SSO, PKI flags, AI config |
+| POST | `/tenants/{id}/settings/pki/ca-certificate` | `tenant.settings` | Upload `root_ca.crt` (PEM body) |
+| DELETE | `/tenants/{id}/settings/pki/ca-certificate` | `tenant.settings` | Xóa CA đã upload |
 
-Body upload CA:
+#### 8.3.2. Phòng ban — `tenant_admin`, `cntt_lanhdao`
+
+| Method | Path | Capability | Mô tả |
+|---|---|---|---|
+| GET | `/departments` | `iam.admin` | List (query: `search`, `status`) |
+| POST | `/departments` | `iam.admin` | Tạo — body: `{ "code", "name" }` |
+| GET | `/departments/{id}` | `iam.admin` | Chi tiết |
+| PATCH | `/departments/{id}` | `iam.admin` | Sửa tên / `status: inactive` (soft deactivate) |
+
+Body tạo phòng ban:
+
+```json
+{
+  "code": "KETOAN",
+  "name": "Phòng Kế toán"
+}
+```
+
+#### 8.3.3. Người dùng — `tenant_admin`, `cntt_lanhdao` (hạn chế gán role — §11.4)
+
+| Method | Path | Capability | Mô tả |
+|---|---|---|---|
+| GET | `/users` | `iam.admin` | List (query: `search`, `system_role`) |
+| POST | `/users` | `iam.admin` | Tạo user |
+| GET | `/users/{id}` | `iam.admin` | Chi tiết |
+| PATCH | `/users/{id}` | `iam.admin` | Sửa display_name, email, status |
+| POST | `/users/{id}/dept-roles` | `iam.admin` | Gán / cập nhật vai trò phòng ban |
+| DELETE | `/users/{id}/dept-roles/{department_id}` | `iam.admin` | Gỡ phân công phòng ban |
+
+Body tạo user:
+
+```json
+{
+  "username": "ketoan.cv@demo-corp",
+  "email": "ketoan.cv@demo-corp",
+  "display_name": "Kế toán — Chuyên viên",
+  "password": "Pass123!",
+  "system_role": "dept_user"
+}
+```
+
+Body gán phòng ban (chỉ `dept_user`):
+
+```json
+{
+  "department_id": "a0000000-0000-4000-8000-000000000101",
+  "role": "chuyenvien"
+}
+```
+
+#### 8.3.4. `/auth/me` — phản ánh phòng ban (Phase 4)
+
+```json
+{
+  "user": {
+    "id": "…",
+    "username": "ketoan.cv@demo-corp",
+    "system_role": "dept_user",
+    "departments": [
+      {
+        "department_id": "…",
+        "department_code": "KETOAN",
+        "department_name": "Phòng Kế toán",
+        "role": "chuyenvien"
+      }
+    ]
+  },
+  "tenant": { "…": "…" }
+}
+```
+
+Body upload CA (Phase 2–3):
 
 ```json
 {
@@ -1064,24 +1175,56 @@ Trước khi chuyển Phase, reviewer xác nhận:
 
 ## 11. Phụ lục
 
-### 11.1. Ma trận vai trò × navigation
+### 11.1. Ma trận vai trò × navigation & phân quyền
 
-**App Shell** (§14.4) — menu sidebar theo role, ẩn route không có quyền:
+**App Shell** (§14.4) — menu sidebar và route guard theo **capability** (§11.4). Ẩn menu + chặn URL trực tiếp (trang 403).
 
-| Menu | Route | Roles |
+#### 11.1.1. Loại tài khoản (`system_role`) — nhãn UI
+
+| `system_role` | Nhãn UI (vi) | Nhãn UI (en) | Ghi chú |
+|---|---|---|---|
+| `platform_admin` | Quản trị nền tảng | Platform operator | Tenant `platform` |
+| `tenant_admin` | Quản trị doanh nghiệp | Organization admin | IAM đầy đủ trong tenant |
+| `cntt_chuyenvien` | Chuyên viên thiết kế mẫu | Template designer | Không IAM |
+| `cntt_lanhdao` | Lãnh đạo duyệt mẫu | Template approver | IAM (trừ `tenant_admin`) |
+| `dept_user` | Nhân viên phòng ban | Department staff | Cần `user_dept_roles` |
+
+#### 11.1.2. Vai trò trong phòng ban (`user_dept_roles.role`)
+
+| `role` | Nhãn UI | Workflow (Phase 8+) |
 |---|---|---|
-| Tổng quan | `/dashboard` | Tất cả |
-| Quản lý doanh nghiệp | `/platform/tenants` | `platform_admin` |
-| Cài đặt tenant | `/admin/settings` | `tenant_admin` |
-| Phòng ban & User | `/admin/departments`, `/admin/users` | tenant_admin, cntt_ld |
-| Mẫu kết xuất (CNTT) | `/cntt/templates` | cntt_cv, cntt_ld |
-| Hàng chờ duyệt mẫu | `/cntt/approvals` | cntt_ld |
-| Mẫu của phòng ban | `/dept/templates` | dept_cv, dept_ld |
-| Giao dịch kết xuất | `/dept/transactions` | dept_cv, dept_ld |
-| Chờ duyệt & Tải file | `/dept/approvals` | dept_ld |
-| Nhật ký (read-only) | `/audit` | tenant_admin, cntt_ld |
+| `chuyenvien` | Chuyên viên | Mẫu PB, giao dịch kết xuất |
+| `lanhdao` | Lãnh đạo | + Duyệt & tải file |
 
-Header cố định: **logo tenant** · tên user · dept badge · nút đăng xuất · (optional) chuyển ngôn ngữ vi/en.
+#### 11.1.3. Ma trận menu × capability
+
+| Menu | Route | Capability | Ai được phép |
+|---|---|---|---|
+| Tổng quan | `/dashboard` | — | Tất cả user đã đăng nhập |
+| Quản lý doanh nghiệp | `/platform/tenants` | `platform.tenants` | `platform_admin` |
+| Cài đặt tenant | `/admin/settings` | `tenant.settings` | `tenant_admin` |
+| Phòng ban | `/admin/departments` | `iam.admin` | `tenant_admin`, `cntt_lanhdao` |
+| Người dùng | `/admin/users` | `iam.admin` | `tenant_admin`, `cntt_lanhdao` |
+| Mẫu kết xuất | `/cntt/templates` | `cntt.templates` | `cntt_chuyenvien`, `cntt_lanhdao` |
+| Duyệt mẫu kết xuất | `/cntt/approvals` | `cntt.approvals` | `cntt_lanhdao` |
+| Mẫu của phòng ban | `/dept/templates` | `dept.templates` | `dept_user` + đã gán PB + (`chuyenvien` hoặc `lanhdao`) |
+| Giao dịch kết xuất | `/dept/transactions` | `dept.transactions` | `dept_user` + đã gán PB + (`chuyenvien` hoặc `lanhdao`) |
+| Chờ duyệt & Tải file | `/dept/approvals` | `dept.approvals` | `dept_user` + đã gán PB + `lanhdao` |
+| Nhật ký | `/audit` | `audit.read` | `tenant_admin`, `cntt_lanhdao` |
+| Trạng thái hệ thống | `/health-ui` | — | Tất cả |
+
+**Lưu ý:** `dept_user` **chưa gán phòng ban** chỉ thấy Tổng quan / Health — không có menu workflow phòng ban.
+
+#### 11.1.4. Hạn chế IAM bổ sung (Phase 4)
+
+| Hành động | `tenant_admin` | `cntt_lanhdao` |
+|---|---|---|
+| Tạo / sửa / vô hiệu `tenant_admin` | ✅ | ❌ |
+| Tạo / sửa `dept_user`, `cntt_*` | ✅ | ✅ |
+| Gán `user_dept_roles` | ✅ | ✅ (trừ target `tenant_admin`) |
+| Cài đặt SSO/PKI | ✅ | ❌ |
+
+Header cố định: **logo tenant** · tên user · **dept badge** (mã phòng ban nếu có) · đăng xuất · (optional) vi/en.
 
 ### 11.2. Mã sự kiện audit (tham chiếu)
 
@@ -1095,6 +1238,12 @@ Header cố định: **logo tenant** · tên user · dept badge · nút đăng x
 | `PKI_CA_UPLOADED` | 3 |
 | `PKI_CA_REMOVED` | 3 |
 | `DEPT_CREATED` | 4 |
+| `DEPT_UPDATED` | 4 |
+| `DEPT_DEACTIVATED` | 4 |
+| `USER_CREATED` | 4 |
+| `USER_UPDATED` | 4 |
+| `USER_DEPT_ROLE_ASSIGNED` | 4 |
+| `USER_DEPT_ROLE_REMOVED` | 4 |
 | `PROVISION_ROLE` | 5 |
 | `RLS_CREATED` | 6 |
 | `AI_GENERATE_SQL` | 7 |
@@ -1117,6 +1266,68 @@ Header cố định: **logo tenant** · tên user · dept badge · nút đăng x
 | Auth test stack (LDAP/PKI) | `portal/docker/docker-compose.auth-test.yml` |
 | LDAP bootstrap LDIF | `portal/docker/auth-test/ldap/bootstrap.ldif` |
 | Keycloak realm demo | `portal/docker/auth-test/keycloak/realm-demo-corp.json` |
+
+### 11.4. Triển khai phân quyền (Phase 4)
+
+**Nguyên tắc:** Một nguồn ma trận — backend enforce API, frontend mirror cho menu + route guard. Không tin tưởng sidebar ẩn menu là đủ bảo mật.
+
+#### 11.4.1. Capability enum
+
+| Capability | Mô tả |
+|---|---|
+| `platform.tenants` | Onboard doanh nghiệp |
+| `tenant.settings` | SSO, PKI, branding |
+| `iam.admin` | CRUD phòng ban & user |
+| `cntt.templates` | Thiết kế mẫu kết xuất |
+| `cntt.approvals` | Duyệt mẫu |
+| `dept.templates` | Xem mẫu đã share cho phòng ban |
+| `dept.transactions` | Tạo giao dịch kết xuất |
+| `dept.approvals` | Duyệt giao dịch + download |
+| `audit.read` | Xem nhật ký |
+
+#### 11.4.2. File mã nguồn
+
+| Lớp | File |
+|---|---|
+| Backend policy | `portal/backend/app/auth/policy.py` |
+| FastAPI dependencies | `portal/backend/app/auth/dependencies.py` — `require_iam_admin`, `require_tenant_admin`, … |
+| Frontend permissions | `portal/frontend/src/features/auth/permissions.ts` |
+| Route guard | `portal/frontend/src/features/auth/RoleRoute.tsx` |
+| Navigation filter | `portal/frontend/src/features/auth/navConfig.ts` → `navItemsForUser()` |
+| Trang 403 | `portal/frontend/src/pages/ForbiddenPage.tsx` |
+
+#### 11.4.3. Luồng kiểm tra
+
+```
+Request API / Navigate URL
+        │
+        ▼
+  get_current_user (+ dept_roles nếu cần)
+        │
+        ▼
+  has_capability(user, capability)
+        │
+   ┌────┴────┐
+   ▼         ▼
+ 200/OK    403 Forbidden
+```
+
+`/auth/me` luôn trả `user.departments[]` để frontend tính capability phòng ban mà không gọi thêm API.
+
+#### 11.4.4. Kiểm thử nhanh (Gate 4)
+
+| User | Hành động | Kỳ vọng |
+|---|---|---|
+| `admin@demo-corp` | GET `/admin/settings` (UI) | 200 |
+| `admin@demo-corp` | GET `/admin/users` (UI) | 200 |
+| `cntt.cv@demo-corp` | GET `/admin/users` (UI) | Trang 403 |
+| `cntt.ld@demo-corp` | GET `/admin/users` (UI) | 200 |
+| `cntt.ld@demo-corp` | GET `/admin/settings` (UI) | Trang 403 |
+| `cntt.ld@demo-corp` | POST `/users` tạo `tenant_admin` | API 403 |
+| `ketoan.cv@demo-corp` | Sidebar menu | Chỉ Tổng quan + Health *(route `/dept/*` Phase 10+)* |
+| `ketoan.ld@demo-corp` | `/auth/me` | Có `departments[].role = lanhdao` |
+
+---
 
 ### 11.4. Ghi chú triển khai tuần tự login
 
@@ -1921,7 +2132,7 @@ Tạo trong `portal/frontend/src/components/` — **reuse**, không duplicate:
 | 1 | Login split, dashboard home |
 | 2 | SSO button, admin auth settings |
 | 3 | PKI wizard step |
-| 4 | Admin dept/user tables |
+| 4 | Admin dept/user tables, RoleRoute 403 |
 | 7 | AI panel + SQL editor shell |
 | 8 | Template Studio + Approval Inbox |
 | 9 | ShareScopePicker modal |
@@ -1931,6 +2142,6 @@ Tạo trong `portal/frontend/src/components/` — **reuse**, không duplicate:
 
 ---
 
-**Phiên bản:** 1.2  
-**Cập nhật:** 2026-06-05  
-**Trạng thái:** Sẵn sàng review — Phase 0 (shell + tokens) → Phase 1 (login). UI: §14. Auth test: §12. K8s: §13. Tổ chức multi-tenant: §2.2.
+**Phiên bản:** 1.4  
+**Cập nhật:** 2026-06-07  
+**Trạng thái:** Phase 0–4 triển khai (Gate 4). Tiếp theo: Phase 5 provisioning Superset. UI: §14. Auth: §12. K8s: §13. Multi-tenant: §2.2. Phân quyền: §11.1, §11.4.

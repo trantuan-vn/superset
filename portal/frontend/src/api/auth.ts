@@ -33,12 +33,20 @@ export interface TenantBranding {
   favicon_url?: string;
 }
 
+export interface UserDeptRole {
+  department_id: string;
+  department_code: string;
+  department_name: string;
+  role: 'chuyenvien' | 'lanhdao';
+}
+
 export interface AuthUser {
   id: string;
   username: string;
   email: string;
   display_name: string;
   system_role: SystemRole;
+  departments?: UserDeptRole[];
 }
 
 export interface AuthTenant {
@@ -166,4 +174,4 @@ export async function verifyPki(
   });
 }
 
-export { ApiError };
+export { ApiError, apiFetch };

@@ -16,72 +16,34 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import type { SystemRole } from '@/api/auth';
+import type { AuthUser } from '@/api/auth';
+import {
+  canAccessRoute,
+  permissionContextFromUser,
+} from '@/features/auth/permissions';
 
 export interface NavItem {
   key: string;
   labelKey: string;
-  roles: SystemRole[] | 'all';
 }
 
-/** Sidebar navigation per §11.1 — Phase 1 shows allowed items only. */
+/** Sidebar navigation entries — visibility resolved via permissions (SPEC §11.1). */
 export const NAV_ITEMS: NavItem[] = [
-  { key: '/dashboard', labelKey: 'nav.overview', roles: 'all' },
-  {
-    key: '/platform/tenants',
-    labelKey: 'nav.platformTenants',
-    roles: ['platform_admin'],
-  },
-  {
-    key: '/admin/settings',
-    labelKey: 'nav.tenantSettings',
-    roles: ['tenant_admin'],
-  },
-  {
-    key: '/admin/departments',
-    labelKey: 'nav.departments',
-    roles: ['tenant_admin', 'cntt_lanhdao'],
-  },
-  {
-    key: '/admin/users',
-    labelKey: 'nav.users',
-    roles: ['tenant_admin', 'cntt_lanhdao'],
-  },
-  {
-    key: '/cntt/templates',
-    labelKey: 'nav.cnttTemplates',
-    roles: ['cntt_chuyenvien', 'cntt_lanhdao'],
-  },
-  {
-    key: '/cntt/approvals',
-    labelKey: 'nav.cnttApprovals',
-    roles: ['cntt_lanhdao'],
-  },
-  {
-    key: '/dept/templates',
-    labelKey: 'nav.deptTemplates',
-    roles: ['dept_user'],
-  },
-  {
-    key: '/dept/transactions',
-    labelKey: 'nav.deptTransactions',
-    roles: ['dept_user'],
-  },
-  {
-    key: '/dept/approvals',
-    labelKey: 'nav.deptApprovals',
-    roles: ['dept_user'],
-  },
-  {
-    key: '/audit',
-    labelKey: 'nav.audit',
-    roles: ['tenant_admin', 'cntt_lanhdao'],
-  },
-  { key: '/health-ui', labelKey: 'nav.health', roles: 'all' },
+  { key: '/dashboard', labelKey: 'nav.overview' },
+  { key: '/platform/tenants', labelKey: 'nav.platformTenants' },
+  { key: '/admin/settings', labelKey: 'nav.tenantSettings' },
+  { key: '/admin/departments', labelKey: 'nav.departments' },
+  { key: '/admin/users', labelKey: 'nav.users' },
+  { key: '/cntt/templates', labelKey: 'nav.cnttTemplates' },
+  { key: '/cntt/approvals', labelKey: 'nav.cnttApprovals' },
+  { key: '/dept/templates', labelKey: 'nav.deptTemplates' },
+  { key: '/dept/transactions', labelKey: 'nav.deptTransactions' },
+  { key: '/dept/approvals', labelKey: 'nav.deptApprovals' },
+  { key: '/audit', labelKey: 'nav.audit' },
+  { key: '/health-ui', labelKey: 'nav.health' },
 ];
 
-export function navItemsForRole(role: SystemRole): NavItem[] {
-  return NAV_ITEMS.filter(
-    (item) => item.roles === 'all' || item.roles.includes(role),
-  );
+export function navItemsForUser(user: AuthUser): NavItem[] {
+  const ctx = permissionContextFromUser(user);
+  return NAV_ITEMS.filter((item) => canAccessRoute(item.key, ctx));
 }

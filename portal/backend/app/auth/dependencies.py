@@ -17,14 +17,17 @@
 """FastAPI dependencies for session authentication."""
 
 import uuid
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from app.auth.policy import Capability, has_capability
 from app.auth.session import SESSION_COOKIE_NAME, SessionData, get_session
 from app.db import get_db
+from app.models.department import UserDeptRole
 from app.models.user import SystemRole, User, UserStatus
 
 
@@ -75,10 +78,44 @@ def get_current_user(
     return user
 
 
+def get_current_user_with_dept_roles(
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> User:
+    """Load department role assignments for authorization checks."""
+    loaded = db.scalar(
+        select(User)
+        .options(joinedload(User.dept_roles).joinedload(UserDeptRole.department))
+        .where(User.id == user.id)
+    )
+    if loaded is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    return loaded
+
+
+def require_capability(
+    capability: Capability,
+) -> Callable[..., User]:
+    def _dependency(
+        user: Annotated[User, Depends(get_current_user_with_dept_roles)],
+    ) -> User:
+        if not has_capability(user, capability):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return user
+
+    return _dependency
+
+
 def require_tenant_admin(
     user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    if user.system_role != SystemRole.TENANT_ADMIN:
+    if not has_capability(user, Capability.TENANT_SETTINGS):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant administrator access required",
@@ -86,10 +123,25 @@ def require_tenant_admin(
     return user
 
 
+def require_iam_admin(
+    user: Annotated[User, Depends(get_current_user_with_dept_roles)],
+) -> User:
+    if not has_capability(user, Capability.IAM_ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access required",
+        )
+    return user
+
+
+# Backward-compatible alias used by Phase 4 API routes
+require_tenant_admin_or_cntt_lanhdao = require_iam_admin
+
+
 def require_platform_admin(
     user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    if user.system_role != SystemRole.PLATFORM_ADMIN:
+    if not has_capability(user, Capability.PLATFORM_TENANTS):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Platform administrator access required",

@@ -27,12 +27,20 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=256)
 
 
+class UserDeptRoleResponse(BaseModel):
+    department_id: str
+    department_code: str
+    department_name: str
+    role: str
+
+
 class UserResponse(BaseModel):
     id: str
     username: str
     email: str
     display_name: str
     system_role: str
+    departments: list[UserDeptRoleResponse] = Field(default_factory=list)
 
 
 class TenantBrandingResponse(BaseModel):
@@ -159,6 +167,53 @@ class TenantSettingsPatch(BaseModel):
         max_length=256,
         description="Current Portal password — used once to verify and push users into LDAP",
     )
+
+
+class DepartmentResponse(BaseModel):
+    id: str
+    tenant_id: str
+    code: str
+    name: str
+    status: str
+
+
+class CreateDepartmentRequest(BaseModel):
+    code: str = Field(..., min_length=2, max_length=64)
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+class UpdateDepartmentRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    status: str | None = None
+
+
+class UserAdminResponse(BaseModel):
+    id: str
+    username: str
+    email: str
+    display_name: str
+    system_role: str
+    status: str
+    departments: list[UserDeptRoleResponse] = Field(default_factory=list)
+
+
+class CreateUserRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=128)
+    email: str = Field(..., min_length=3, max_length=255)
+    display_name: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=8, max_length=256)
+    system_role: str = Field(..., description="dept_user, cntt_chuyenvien, cntt_lanhdao, tenant_admin")
+
+
+class UpdateUserRequest(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    email: str | None = Field(default=None, min_length=3, max_length=255)
+    status: str | None = None
+
+
+class AssignDeptRoleRequest(BaseModel):
+    department_id: str
+    role: str = Field(..., description="chuyenvien or lanhdao")
 
 
 def branding_from_json(raw: dict[str, Any] | None) -> TenantBrandingResponse | None:

@@ -37,7 +37,7 @@ import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/features/auth/useAuth';
-import { navItemsForRole } from '@/features/auth/navConfig';
+import { navItemsForUser } from '@/features/auth/navConfig';
 import { layout as layoutTokens } from '@/design-system/tokens';
 
 import styles from './AppShell.module.css';
@@ -64,6 +64,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, tenant, logout } = useAuth();
+  const primaryDept = user?.departments?.[0];
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
 
@@ -78,7 +79,7 @@ export function AppShell() {
   }, [collapsed]);
 
   const allowedNav = useMemo(
-    () => (user ? navItemsForRole(user.system_role) : []),
+    () => (user ? navItemsForUser(user) : []),
     [user],
   );
 
@@ -183,6 +184,9 @@ export function AppShell() {
             <h1 className={styles.appTitle}>{appTitle}</h1>
             {tenant ? (
               <Tag className={styles.tenantBadge}>{tenant.name}</Tag>
+            ) : null}
+            {primaryDept ? (
+              <Tag color="blue">{primaryDept.department_code}</Tag>
             ) : null}
           </div>
 

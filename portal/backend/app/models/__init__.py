@@ -16,6 +16,7 @@
 # under the License.
 
 from app.models.audit import AuditLog
+from app.models.department import Department, DepartmentStatus, DeptRole, UserDeptRole
 from app.models.tenant import Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
 from app.models.user_auth import AuthProvider, UserAuthIdentity
@@ -24,11 +25,15 @@ from app.models.user_certificate import UserCertificate
 __all__ = [
     "AuditLog",
     "AuthProvider",
+    "Department",
+    "DepartmentStatus",
+    "DeptRole",
     "SystemRole",
     "Tenant",
     "TenantSettings",
     "User",
     "UserAuthIdentity",
     "UserCertificate",
+    "UserDeptRole",
     "UserStatus",
 ]

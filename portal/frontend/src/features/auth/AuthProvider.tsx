@@ -42,11 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
+  const sessionExpired =
+    isError && error instanceof ApiError && error.status === 401;
+
   const sessionExpiredShown = useRef(false);
 
   useEffect(() => {
-    const sessionExpired =
-      isError && error instanceof ApiError && error.status === 401;
     if (sessionExpired && !sessionExpiredShown.current) {
       sessionExpiredShown.current = true;
       message.warning(t('auth.sessionExpired'));
@@ -54,12 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sessionExpired) {
       sessionExpiredShown.current = false;
     }
-  }, [isError, error, t]);
+  }, [sessionExpired, t]);
 
   const login = useCallback(
     async (payload: Parameters<typeof apiLogin>[0]) => {
       const result = await apiLogin(payload);
       queryClient.setQueryData(AUTH_QUERY_KEY, result);
+      // Clear stale IAM query errors from a prior unauthenticated visit.
+      await queryClient.invalidateQueries({ queryKey: ['admin'] });
       return result;
     },
     [queryClient],
@@ -78,22 +81,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refetch();
   }, [refetch]);
 
-  const pkiPending = Boolean(data?.pki_pending);
-  const isFullyAuthenticated = Boolean(data?.user) && !pkiPending;
+  const pkiPending = Boolean(data?.pki_pending) && !sessionExpired;
+  const isFullyAuthenticated =
+    Boolean(data?.user) && !pkiPending && !sessionExpired;
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      user: data?.user ?? null,
-      tenant: data?.tenant ?? null,
+      user: sessionExpired ? null : (data?.user ?? null),
+      tenant: sessionExpired ? null : (data?.tenant ?? null),
       isLoading,
       isAuthenticated: isFullyAuthenticated,
       pkiPending,
-      certSerial: data?.cert_serial ?? null,
+      certSerial: sessionExpired ? null : (data?.cert_serial ?? null),
       login,
       logout,
       refresh,
     }),
-    [data, isLoading, isFullyAuthenticated, pkiPending, login, logout, refresh],
+    [
+      data,
+      isLoading,
+      isFullyAuthenticated,
+      pkiPending,
+      sessionExpired,
+      login,
+      logout,
+      refresh,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

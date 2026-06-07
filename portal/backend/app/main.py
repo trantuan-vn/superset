@@ -20,11 +20,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.departments import router as departments_router
 from app.api.health import router as health_router
 from app.api.pki import router as pki_router
 from app.api.sso import router as sso_router
 from app.api.platform import router as platform_router
 from app.api.tenants import router as tenants_router
+from app.api.users import router as users_router
 from app.config import get_settings
 
 settings = get_settings()
@@ -51,3 +53,5 @@ app.include_router(pki_router)
 app.include_router(sso_router)
 app.include_router(tenants_router)
 app.include_router(platform_router)
+app.include_router(departments_router)
+app.include_router(users_router)

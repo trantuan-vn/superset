@@ -26,6 +26,7 @@ from app.api.schemas import (
     MeResponse,
     MessageResponse,
     TenantResponse,
+    UserDeptRoleResponse,
     UserResponse,
     branding_from_json,
 )
@@ -36,6 +37,7 @@ from app.auth.service import AuthError, get_me, login, logout
 from app.auth.session import SESSION_COOKIE_NAME
 from app.config import get_settings
 from app.db import get_db
+from app.departments.service import load_user_dept_roles
 from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -67,13 +69,15 @@ def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
 
 
-def _user_response(user: User) -> UserResponse:
+def _user_response(user: User, db: Session) -> UserResponse:
+    dept_roles = load_user_dept_roles(db, user.id)
     return UserResponse(
         id=str(user.id),
         username=user.username,
         email=user.email,
         display_name=user.display_name,
         system_role=user.system_role.value,
+        departments=[UserDeptRoleResponse(**role) for role in dept_roles],
     )
 
 
@@ -99,7 +103,7 @@ def auth_login(
 
     _set_session_cookie(response, result.session_id, result.ttl_seconds)
     return MeResponse(
-        user=_user_response(result.user),
+        user=_user_response(result.user, db),
         tenant=TenantResponse(
             id=str(result.tenant.id),
             slug=result.tenant.slug,
@@ -142,7 +146,7 @@ def auth_me(
     )
 
     return MeResponse(
-        user=_user_response(result.user),
+        user=_user_response(result.user, db),
         tenant=TenantResponse(
             id=str(result.tenant.id),
             slug=result.tenant.slug,

@@ -28,6 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 if TYPE_CHECKING:
+    from app.models.department import UserDeptRole
     from app.models.user_auth import UserAuthIdentity
     from app.models.user_certificate import UserCertificate
 
@@ -95,4 +96,7 @@ class User(Base):
     )
     certificates: Mapped[list["UserCertificate"]] = relationship(
         "UserCertificate", back_populates="user"
+    )
+    dept_roles: Mapped[list["UserDeptRole"]] = relationship(
+        "UserDeptRole", back_populates="user"
     )

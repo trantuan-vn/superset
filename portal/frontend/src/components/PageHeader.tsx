@@ -21,11 +21,12 @@ import type { ReactNode } from 'react';
 
 interface PageHeaderProps {
   title: string;
+  subtitle?: string;
   breadcrumb?: { title: string; href?: string }[];
   extra?: ReactNode;
 }
 
-export function PageHeader({ title, breadcrumb, extra }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, breadcrumb, extra }: PageHeaderProps) {
   return (
     <div style={{ marginBottom: 24 }}>
       {breadcrumb && breadcrumb.length > 0 && (
@@ -46,9 +47,16 @@ export function PageHeader({ title, breadcrumb, extra }: PageHeaderProps) {
           flexWrap: 'wrap',
         }}
       >
-        <Typography.Title level={2} style={{ margin: 0 }}>
-          {title}
-        </Typography.Title>
+        <div>
+          <Typography.Title level={2} style={{ margin: 0 }}>
+            {title}
+          </Typography.Title>
+          {subtitle ? (
+            <Typography.Paragraph type="secondary" style={{ margin: '4px 0 0' }}>
+              {subtitle}
+            </Typography.Paragraph>
+          ) : null}
+        </div>
         {extra}
       </div>
     </div>

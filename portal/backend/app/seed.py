@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Idempotent demo seed data for Phase 1."""
+"""Idempotent demo seed data for Phase 1+."""
 
 import uuid
 
@@ -22,11 +22,13 @@ from sqlalchemy import select
 
 from app.auth.password import hash_password
 from app.db import SessionLocal
+from app.models.department import Department, DepartmentStatus, DeptRole, UserDeptRole
 from app.models.tenant import Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
 
 DEMO_TENANT_ID = uuid.UUID("a0000000-0000-4000-8000-000000000001")
 PLATFORM_TENANT_ID = uuid.UUID("a0000000-0000-4000-8000-000000000010")
+DEMO_DEPT_KETOAN_ID = uuid.UUID("a0000000-0000-4000-8000-000000000101")
 DEMO_PASSWORD = "Pass123!"
 
 DEMO_USERS: list[dict[str, str | SystemRole]] = [
@@ -39,14 +41,26 @@ DEMO_USERS: list[dict[str, str | SystemRole]] = [
     {
         "username": "cntt.cv@demo-corp",
         "email": "cntt.cv@demo-corp",
-        "display_name": "CNTT Chuyên viên",
+        "display_name": "Chuyên viên thiết kế mẫu",
         "system_role": SystemRole.CNTT_CHUYENVIEN,
     },
     {
         "username": "cntt.ld@demo-corp",
         "email": "cntt.ld@demo-corp",
-        "display_name": "CNTT Lãnh đạo",
+        "display_name": "Lãnh đạo duyệt mẫu",
         "system_role": SystemRole.CNTT_LANHDAO,
+    },
+    {
+        "username": "ketoan.cv@demo-corp",
+        "email": "ketoan.cv@demo-corp",
+        "display_name": "Kế toán — Chuyên viên",
+        "system_role": SystemRole.DEPT_USER,
+    },
+    {
+        "username": "ketoan.ld@demo-corp",
+        "email": "ketoan.ld@demo-corp",
+        "display_name": "Kế toán — Lãnh đạo",
+        "system_role": SystemRole.DEPT_USER,
     },
 ]
 
@@ -97,6 +111,47 @@ def seed_demo_data() -> None:
                         status=UserStatus.ACTIVE,
                     )
                 )
+
+        dept = db.get(Department, DEMO_DEPT_KETOAN_ID)
+        if dept is None:
+            dept = Department(
+                id=DEMO_DEPT_KETOAN_ID,
+                tenant_id=DEMO_TENANT_ID,
+                code="KETOAN",
+                name="Phòng Kế toán",
+                status=DepartmentStatus.ACTIVE,
+            )
+            db.add(dept)
+            db.flush()
+
+        def _ensure_dept_role(username: str, role: DeptRole) -> None:
+            user = db.scalar(
+                select(User).where(
+                    User.tenant_id == DEMO_TENANT_ID,
+                    User.username == username,
+                )
+            )
+            if user is None:
+                return
+            assignment = db.scalar(
+                select(UserDeptRole).where(
+                    UserDeptRole.user_id == user.id,
+                    UserDeptRole.department_id == dept.id,
+                )
+            )
+            if assignment is None:
+                db.add(
+                    UserDeptRole(
+                        user_id=user.id,
+                        department_id=dept.id,
+                        role=role,
+                    )
+                )
+            elif assignment.role != role:
+                assignment.role = role
+
+        _ensure_dept_role("ketoan.cv@demo-corp", DeptRole.CHUYENVIEN)
+        _ensure_dept_role("ketoan.ld@demo-corp", DeptRole.LANHDAO)
 
         platform = db.get(Tenant, PLATFORM_TENANT_ID)
         if platform is None:
