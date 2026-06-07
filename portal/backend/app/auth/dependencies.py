@@ -147,3 +147,15 @@ def require_platform_admin(
             detail="Platform administrator access required",
         )
     return user
+
+
+def require_cntt_chuyenvien(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Gate 7 — only template designers may use AI SQL generation."""
+    if user.system_role != SystemRole.CNTT_CHUYENVIEN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Template designer access required",
+        )
+    return user

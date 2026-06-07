@@ -52,6 +52,11 @@ interface AuthSettingsFormValues {
   auth_mode: 'local' | 'oidc' | 'saml' | 'ldap';
   digital_signature_enabled: boolean;
   ocsp_enabled: boolean;
+  ai_enabled: boolean;
+  ai_provider: 'mock' | 'openai_compatible';
+  ai_endpoint?: string;
+  ai_model?: string;
+  ai_api_key?: string;
   ldap_uri?: string;
   bind_dn?: string;
   bind_password?: string;
@@ -124,11 +129,20 @@ export function AdminSettingsPage() {
     return null;
   }
 
+  const aiProvider =
+    (data?.ai_config?.provider as string | undefined) === 'openai_compatible'
+      ? 'openai_compatible'
+      : 'mock';
+
   const initialValues: AuthSettingsFormValues = {
     sso_ldap_enabled: data?.sso_ldap_enabled ?? false,
     auth_mode: data?.auth_mode ?? 'local',
     digital_signature_enabled: data?.digital_signature_enabled ?? false,
     ocsp_enabled: Boolean(data?.pki_config?.ocsp_enabled),
+    ai_enabled: data?.ai_enabled ?? false,
+    ai_provider: aiProvider,
+    ai_endpoint: (data?.ai_config?.endpoint as string) ?? '',
+    ai_model: (data?.ai_config?.model as string) ?? 'gpt-4o-mini',
     ldap_uri: (data?.sso_config?.ldap_uri as string) ?? '',
     bind_dn: (data?.sso_config?.bind_dn as string) ?? '',
     user_base_dn: (data?.sso_config?.user_base_dn as string) ?? '',
@@ -184,12 +198,25 @@ export function AdminSettingsPage() {
       allowed_eku: ['clientAuth', 'emailProtection'],
     };
 
+    const aiConfig: Record<string, unknown> = {
+      provider: values.ai_provider,
+    };
+    if (values.ai_provider === 'openai_compatible') {
+      aiConfig.endpoint = values.ai_endpoint?.trim() || undefined;
+      aiConfig.model = values.ai_model?.trim() || 'gpt-4o-mini';
+      if (values.ai_api_key?.trim()) {
+        aiConfig.api_key = values.ai_api_key.trim();
+      }
+    }
+
     const patch: TenantSettingsPatch = {
       sso_ldap_enabled: values.sso_ldap_enabled,
       auth_mode: values.sso_ldap_enabled ? values.auth_mode : 'local',
       sso_config: values.sso_ldap_enabled ? ssoConfig : undefined,
       digital_signature_enabled: values.digital_signature_enabled,
       pki_config: values.digital_signature_enabled ? pkiConfig : undefined,
+      ai_enabled: values.ai_enabled,
+      ai_config: values.ai_enabled ? aiConfig : undefined,
     };
     if (values.sso_ldap_enabled && values.auth_mode === 'ldap') {
       patch.portal_password = values.portal_password?.trim() || undefined;
@@ -209,6 +236,10 @@ export function AdminSettingsPage() {
   const pkiEnabled =
     Form.useWatch('digital_signature_enabled', form) ??
     initialValues.digital_signature_enabled;
+  const aiEnabled =
+    Form.useWatch('ai_enabled', form) ?? initialValues.ai_enabled;
+  const aiProviderWatch =
+    Form.useWatch('ai_provider', form) ?? initialValues.ai_provider;
   const ldapMigrationRequired =
     data?.ldap_migration_required ??
     (ssoEnabled && authMode === 'ldap' && !data?.sso_ldap_enabled);
@@ -338,6 +369,57 @@ export function AdminSettingsPage() {
               >
                 <Switch />
               </Form.Item>
+            </>
+          ) : null}
+
+          <Typography.Title level={5}>
+            {t('adminSettings.aiSection')}
+          </Typography.Title>
+          <Form.Item
+            name="ai_enabled"
+            label={t('adminSettings.aiEnabled')}
+            valuePropName="checked"
+            extra={t('adminSettings.aiEnabledHint')}
+          >
+            <Switch />
+          </Form.Item>
+          {aiEnabled ? (
+            <>
+              <Form.Item name="ai_provider" label={t('adminSettings.aiProvider')}>
+                <Select
+                  options={[
+                    {
+                      value: 'mock',
+                      label: t('adminSettings.aiProviderMock'),
+                    },
+                    {
+                      value: 'openai_compatible',
+                      label: t('adminSettings.aiProviderOpenai'),
+                    },
+                  ]}
+                />
+              </Form.Item>
+              {aiProviderWatch === 'openai_compatible' ? (
+                <>
+                  <Form.Item
+                    name="ai_endpoint"
+                    label={t('adminSettings.aiEndpoint')}
+                    rules={[{ required: true, message: t('adminSettings.aiEndpoint') }]}
+                  >
+                    <Input placeholder="https://api.openai.com" />
+                  </Form.Item>
+                  <Form.Item name="ai_model" label={t('adminSettings.aiModel')}>
+                    <Input placeholder="gpt-4o-mini" />
+                  </Form.Item>
+                  <Form.Item
+                    name="ai_api_key"
+                    label={t('adminSettings.aiApiKey')}
+                    extra={t('adminSettings.aiApiKeyHint')}
+                  >
+                    <Input.Password placeholder="sk-..." />
+                  </Form.Item>
+                </>
+              ) : null}
             </>
           ) : null}
 

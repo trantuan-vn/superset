@@ -54,6 +54,7 @@ class TenantResponse(BaseModel):
     id: str
     slug: str
     name: str
+    ai_enabled: bool = False
     branding: TenantBrandingResponse | None = None
 
 
@@ -238,6 +239,22 @@ class UpdateUserRequest(BaseModel):
 class AssignDeptRoleRequest(BaseModel):
     department_id: str
     role: str = Field(..., description="chuyenvien or lanhdao")
+
+
+class GenerateSqlRequest(BaseModel):
+    prompt: str = Field(..., min_length=3, max_length=4000)
+    context_sql: str | None = Field(default=None, max_length=32000)
+    dataset_hint: str | None = Field(default=None, max_length=128)
+
+
+class GenerateSqlResponse(BaseModel):
+    sql: str
+
+
+class McpTokenResponse(BaseModel):
+    token: str
+    expires_in_seconds: int
+    superset_username: str
 
 
 def branding_from_json(raw: dict[str, Any] | None) -> TenantBrandingResponse | None:

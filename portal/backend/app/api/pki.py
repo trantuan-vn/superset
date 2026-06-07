@@ -147,6 +147,7 @@ def pki_status(
             id=str(tenant.id),
             slug=tenant.slug,
             name=tenant.name,
+            ai_enabled=settings.ai_enabled if settings else False,
             branding=branding_from_json(settings.branding if settings else None),
         ),
         pki_pending=session_needs_pki(session),

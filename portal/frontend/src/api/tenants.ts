@@ -42,6 +42,8 @@ export interface TenantSettingsPatch {
   sso_config?: Record<string, unknown>;
   digital_signature_enabled?: boolean;
   pki_config?: Record<string, unknown>;
+  ai_enabled?: boolean;
+  ai_config?: Record<string, unknown>;
   branding?: Record<string, unknown>;
   /** Required when first enabling LDAP — must match Portal password(s) to migrate. */
   portal_password?: string;

@@ -117,7 +117,17 @@
     "caSubject": "Chủ thể CA",
     "caFingerprint": "Fingerprint (SHA-256)",
     "caUploadedAt": "Thời điểm tải lên",
-    "ocspEnabled": "Bật kiểm tra OCSP (thu hồi cert)"
+    "ocspEnabled": "Bật kiểm tra OCSP (thu hồi cert)",
+    "aiSection": "Trợ lý AI",
+    "aiEnabled": "Bật sinh SQL bằng AI",
+    "aiEnabledHint": "Khi tắt, chuyên viên thiết kế mẫu nhập SQL thủ công (Gate 7).",
+    "aiProvider": "Nhà cung cấp",
+    "aiProviderMock": "Mock (phát triển)",
+    "aiProviderOpenai": "API tương thích OpenAI",
+    "aiEndpoint": "Endpoint API",
+    "aiModel": "Model",
+    "aiApiKey": "API key",
+    "aiApiKeyHint": "Để trống nếu không đổi — giá trị hiện tại được giữ nguyên"
   },
   "adminDepartments": {
     "title": "Phòng ban",
@@ -295,5 +305,50 @@
     "title": "Không có quyền truy cập",
     "subtitle": "Bạn không có quyền xem trang này.",
     "backToDashboard": "Về trang tổng quan"
+  },
+  "cnttTemplates": {
+    "title": "Mẫu kết xuất",
+    "subtitle": "Thiết kế mẫu SQL kết xuất cho các phòng ban (Phase 7 — studio nháp).",
+    "create": "Tạo nháp mẫu mới",
+    "emptyTitle": "Chưa có mẫu nào",
+    "emptyAiOn": "Tổ chức của bạn đã bật sinh SQL bằng AI.",
+    "emptyAiOff": "Nhập SQL thủ công — AI đang tắt cho tổ chức của bạn."
+  },
+  "templateStudio": {
+    "newTitle": "Nháp mẫu mới",
+    "editTitle": "Sửa nháp mẫu",
+    "backToList": "Về danh sách",
+    "aiPanel": "Trợ lý AI",
+    "sqlPanel": "Trình soạn SQL",
+    "sqlLabel": "Truy vấn SQL",
+    "sqlRequired": "Nhập truy vấn SQL trước khi lưu.",
+    "statusLabel": "Trạng thái",
+    "statusDraft": "Nháp",
+    "saveDraft": "Lưu nháp",
+    "submitReview": "Gửi duyệt",
+    "draftSavedLocal": "Đã lưu nháp cục bộ (lưu trữ server sẽ có ở Phase 8).",
+    "previewComingPhase8": "Xem trước dữ liệu và quy trình duyệt sẽ có ở Phase 8.",
+    "phase7HintTitle": "Template Studio (Phase 7)",
+    "phase7HintDesc": "Soạn SQL thủ công hoặc dùng AI. CRUD mẫu và quy trình duyệt đầy đủ sẽ có ở Phase 8.",
+    "diffTitle": "Thay thế SQL?",
+    "diffSummary": "Số dòng thay đổi: {{summary}}",
+    "diffBefore": "SQL hiện tại",
+    "diffAfter": "SQL được sinh",
+    "diffConfirm": "Thay thế",
+    "diffCancel": "Giữ nguyên",
+    "ai": {
+      "title": "Trợ lý AI",
+      "subtitle": "Mô tả nhu cầu kết xuất; SQL sinh ra chỉ đọc (SELECT).",
+      "promptLabel": "Yêu cầu AI",
+      "promptPlaceholder": "vd. Liệt kê dòng kết xuất của tenant hiện tại, tối đa 100 dòng",
+      "promptRequired": "Nhập yêu cầu trước khi sinh SQL.",
+      "generate": "Sinh SQL",
+      "insert": "Chèn vào trình soạn",
+      "inserted": "Đã chèn SQL vào trình soạn",
+      "draftLabel": "Nháp SQL được sinh",
+      "error": "Sinh SQL thất bại",
+      "disabledTitle": "AI đang tắt",
+      "disabledDesc": "Quản trị viên đã tắt AI. Nhập SQL thủ công trong trình soạn."
+    }
   }
 }

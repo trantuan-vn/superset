@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     provisioning_http_timeout: float = 30.0
     # Phase 6 — comma-separated Superset dataset names for RLS attachment
     superset_rls_dataset_names: str = "portal_export_data"
+    # Phase 7 — AI rate limit (per user, rolling window)
+    ai_rate_limit_per_hour: int = 30
+    ai_rate_limit_window_seconds: int = 3600
+    # Phase 7 — MCP JWT (HS256 shared secret with Superset MCP_AUTH_ENABLED)
+    mcp_jwt_secret: str = "change-me-mcp-jwt-secret-in-production"
+    mcp_jwt_issuer: str = "portal"
+    mcp_jwt_audience: str = "superset-mcp"
+    mcp_jwt_algorithm: str = "HS256"
+    mcp_jwt_ttl_minutes: int = 15
 
 
 @lru_cache

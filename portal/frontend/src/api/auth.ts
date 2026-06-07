@@ -53,6 +53,7 @@ export interface AuthTenant {
   id: string;
   slug: string;
   name: string;
+  ai_enabled?: boolean;
   branding?: TenantBranding | null;
 }
 

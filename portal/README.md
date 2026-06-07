@@ -219,6 +219,52 @@ Biến môi trường:
 cd portal/backend && pytest tests/test_rls.py -q
 ```
 
+## Phase 7 — AI Orchestrator + MCP (feature flag)
+
+**Mục tiêu:** Chuyên viên thiết kế mẫu sinh SQL bằng AI (tùy chọn) hoặc nhập tay — Template Studio bắt đầu.
+
+### Backend
+
+| Thành phần | Mô tả |
+|---|---|
+| `POST /ai/generate-sql` | Sinh SQL (chỉ `cntt_chuyenvien`) |
+| `POST /ai/generate-sql/stream` | SSE streaming response |
+| `GET /ai/mcp-token` | JWT ngắn hạn cho Superset MCP |
+| `app/ai/sql_validator.py` | Chặn SQL nguy hiểm (chỉ SELECT) |
+| Rate limit Redis | `AI_RATE_LIMIT_PER_HOUR` (mặc định 30/giờ) |
+| Audit | `AI_GENERATE_SQL`, `AI_MCP_TOKEN_ISSUED` |
+
+### Frontend
+
+- **Cài đặt tenant:** bật/tắt AI, cấu hình provider (mock / OpenAI-compatible)
+- **`/cntt/templates`:** danh sách mẫu (empty state)
+- **`/cntt/templates/new`:** Template Studio — AI panel + SQL editor, diff khi chèn SQL
+
+### Cấu hình Superset MCP (tùy chọn)
+
+```python
+MCP_AUTH_ENABLED = True
+MCP_RBAC_ENABLED = True
+MCP_JWT_ALGORITHM = "HS256"
+MCP_JWT_SECRET = "<same as portal MCP_JWT_SECRET>"
+MCP_JWT_ISSUER = "portal"
+MCP_JWT_AUDIENCE = "superset-mcp"
+```
+
+### Gate 7 — Checklist
+
+- [ ] AI tắt → nhập SQL thủ công OK
+- [ ] Chỉ `cntt_chuyenvien` gọi được `/ai/*`
+- [ ] SQL `DELETE`/`DROP`/… bị chặn (422)
+- [ ] Audit `AI_GENERATE_SQL` sau mỗi lần sinh
+- [ ] Rate limit trả 429 khi vượt quota
+
+```bash
+cd portal/backend && pytest tests/test_ai.py -q
+```
+
+**Tài khoản demo:** `cntt.cv@demo-corp` / `Pass123!` — bật AI trong **Cài đặt tenant** trước khi thử Generate.
+
 ## Phase tiếp theo
 
-**Phase 7:** AI Orchestrator + MCP (feature flag) — xem §7 trong spec.
+**Phase 8:** Workflow CNTT — tạo & duyệt mẫu — xem §8 trong spec.

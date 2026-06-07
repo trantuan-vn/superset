@@ -21,6 +21,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.ai import router as ai_router
 from app.api.auth import router as auth_router
 from app.api.departments import router as departments_router
 from app.api.health import router as health_router
@@ -69,3 +70,4 @@ app.include_router(platform_router)
 app.include_router(departments_router)
 app.include_router(users_router)
 app.include_router(provisioning_router)
+app.include_router(ai_router)

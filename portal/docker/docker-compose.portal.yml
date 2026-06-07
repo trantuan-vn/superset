@@ -63,6 +63,11 @@ services:
       SUPERSET_INTERNAL_URL: http://host.docker.internal:8088
       SUPERSET_SERVICE_USERNAME: portal_provisioner
       SUPERSET_RLS_DATASET_NAMES: portal_export_data
+      # Phase 7 — AI + MCP JWT (dev defaults; override in portal/backend/.env)
+      MCP_JWT_SECRET: portal-dev-mcp-jwt-secret-change-in-prod
+      MCP_JWT_ISSUER: portal
+      MCP_JWT_AUDIENCE: superset-mcp
+      AI_RATE_LIMIT_PER_HOUR: "30"
     ports:
       - "8000:8000"
     depends_on:

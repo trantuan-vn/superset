@@ -117,7 +117,17 @@
     "caSubject": "CA subject",
     "caFingerprint": "Fingerprint (SHA-256)",
     "caUploadedAt": "Uploaded at",
-    "ocspEnabled": "Enable OCSP revocation checks"
+    "ocspEnabled": "Enable OCSP revocation checks",
+    "aiSection": "AI assistant",
+    "aiEnabled": "Enable AI SQL generation",
+    "aiEnabledHint": "When off, template designers enter SQL manually (Gate 7).",
+    "aiProvider": "Provider",
+    "aiProviderMock": "Mock (development)",
+    "aiProviderOpenai": "OpenAI-compatible API",
+    "aiEndpoint": "API endpoint",
+    "aiModel": "Model",
+    "aiApiKey": "API key",
+    "aiApiKeyHint": "Leave blank to keep the existing key"
   },
   "adminDepartments": {
     "title": "Departments",
@@ -295,5 +305,50 @@
     "title": "Access denied",
     "subtitle": "You do not have permission to view this page.",
     "backToDashboard": "Back to overview"
+  },
+  "cnttTemplates": {
+    "title": "Export templates",
+    "subtitle": "Design SQL export templates for departments (Phase 7 — draft studio).",
+    "create": "New template draft",
+    "emptyTitle": "No templates yet",
+    "emptyAiOn": "AI-assisted SQL generation is enabled for your organization.",
+    "emptyAiOff": "Enter SQL manually — AI is disabled for your organization."
+  },
+  "templateStudio": {
+    "newTitle": "New template draft",
+    "editTitle": "Edit template draft",
+    "backToList": "Back to list",
+    "aiPanel": "AI assistant",
+    "sqlPanel": "SQL editor",
+    "sqlLabel": "SQL query",
+    "sqlRequired": "Enter a SQL query before saving.",
+    "statusLabel": "Status",
+    "statusDraft": "Draft",
+    "saveDraft": "Save draft",
+    "submitReview": "Submit for review",
+    "draftSavedLocal": "Draft saved locally (persistence arrives in Phase 8).",
+    "previewComingPhase8": "Data preview and workflow actions arrive in Phase 8.",
+    "phase7HintTitle": "Template Studio (Phase 7)",
+    "phase7HintDesc": "Compose SQL manually or with AI. Full template CRUD and approval workflow ship in Phase 8.",
+    "diffTitle": "Replace SQL?",
+    "diffSummary": "Line count change: {{summary}}",
+    "diffBefore": "Current SQL",
+    "diffAfter": "Generated SQL",
+    "diffConfirm": "Replace",
+    "diffCancel": "Keep current",
+    "ai": {
+      "title": "AI assistant",
+      "subtitle": "Describe the export you need; generated SQL is read-only (SELECT).",
+      "promptLabel": "AI prompt",
+      "promptPlaceholder": "e.g. List export rows for the current tenant, limit 100",
+      "promptRequired": "Enter a prompt before generating.",
+      "generate": "Generate",
+      "insert": "Insert into editor",
+      "inserted": "SQL inserted into editor",
+      "draftLabel": "Generated SQL draft",
+      "error": "AI generation failed",
+      "disabledTitle": "AI is off",
+      "disabledDesc": "Your tenant administrator disabled AI. Enter SQL manually in the editor."
+    }
   }
 }

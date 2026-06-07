@@ -76,6 +76,17 @@ def ldap_migration_required(db: Session, settings: TenantSettings) -> bool:
 _SECRET_KEYS = ("bind_password", "client_secret", "bind_password_ref", "client_secret_ref")
 
 
+def _mask_ai_config(config: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not config:
+        return None
+    masked = copy.deepcopy(config)
+    if masked.get("api_key") or masked.get("api_key_ref"):
+        masked["api_key_set"] = True
+    if "api_key" in masked:
+        masked["api_key"] = mask_secret_value(str(masked["api_key"])) or "********"
+    return masked
+
+
 def _mask_sso_config(config: dict[str, Any] | None) -> dict[str, Any] | None:
     if not config:
         return None
@@ -119,7 +130,7 @@ def settings_to_response(
         "digital_signature_enabled": settings.digital_signature_enabled,
         "pki_config": mask_pki_config_for_api(settings.pki_config),
         "ai_enabled": settings.ai_enabled,
-        "ai_config": settings.ai_config,
+        "ai_config": _mask_ai_config(settings.ai_config),
         "export_formats": settings.export_formats,
         "download_token_ttl_hours": settings.download_token_ttl_hours,
         "branding": settings.branding,
@@ -166,7 +177,10 @@ def update_tenant_settings(
         settings.digital_signature_enabled = enabling
 
     if "ai_enabled" in patch:
-        settings.ai_enabled = bool(patch["ai_enabled"])
+        enabling_ai = bool(patch["ai_enabled"])
+        if enabling_ai and not settings.ai_config:
+            settings.ai_config = {"provider": "mock"}
+        settings.ai_enabled = enabling_ai
 
     if "branding" in patch:
         settings.branding = patch["branding"]
@@ -195,8 +209,14 @@ def update_tenant_settings(
                 merged_pki[key] = value
         settings.pki_config = merged_pki
 
-    if "ai_config" in patch:
-        settings.ai_config = patch["ai_config"]
+    if "ai_config" in patch and patch["ai_config"] is not None:
+        merged_ai = copy.deepcopy(settings.ai_config or {})
+        for key, value in patch["ai_config"].items():
+            if key == "api_key" and not value:
+                continue
+            if value is not None:
+                merged_ai[key] = value
+        settings.ai_config = merged_ai
 
     will_be_ldap = settings.sso_ldap_enabled and settings.auth_mode == AuthMode.LDAP
     needs_migration = will_be_ldap and count_local_password_users(db, tenant_id) > 0
