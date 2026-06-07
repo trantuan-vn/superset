@@ -1,8 +1,8 @@
-# Spec Portal Kết xuất Dữ liệu v1.4
+# Spec Portal Kết xuất Dữ liệu v1.5
 
 > **Mục đích:** Đặc tả triển khai **tuần tự, có Gate kiểm duyệt** cho Portal quy trình kết xuất trên Apache Superset.  
 > **Nguyên tắc:** Mỗi Phase = **Backend + Frontend + Gate** → OK mới sang Phase tiếp theo.  
-> **Trạng thái:** v1.4 — Phase 0–4 đã triển khai (Gate 4); UI/UX (§14), auth test (§12), K8s LDAP/PKI (§13), multi-tenant (§2.2), **phân quyền role × phòng ban (§11.1)**.
+> **Trạng thái:** v1.5 — Phase 0–5 đã triển khai; UI/UX (§14), auth test (§12), K8s LDAP/PKI (§13), multi-tenant (§2.2), **phân quyền loại tài khoản × phòng ban (§11.1)**.
 
 ### Cách đọc tài liệu
 
@@ -154,7 +154,7 @@ Portal phục vụ **nhiều công ty độc lập**. Mỗi công ty là một *
 | `demo-corp` | `ketoan.cv@demo-corp` | `Pass123!` | `dept_user` | NV phòng KETOAN — `chuyenvien` |
 | `demo-corp` | `ketoan.ld@demo-corp` | `Pass123!` | `dept_user` | NV phòng KETOAN — `lanhdao` |
 
-Phòng ban seed: `KETOAN` / *Phòng Kế toán* (tenant `demo-corp`). UI hiển thị **Loại tài khoản** (không dùng nhãn nội bộ `CNTT` — xem §11.4).
+Phòng ban seed: `KETOAN` / *Phòng Kế toán* (tenant `demo-corp`). UI hiển thị **Loại tài khoản** và **Vai trò trong phòng ban** tách biệt (không dùng nhãn nội bộ `CNTT` — xem §11.1).
 
 #### 2.2.2. Sơ đồ phân tầng
 
@@ -176,7 +176,8 @@ Phòng ban seed: `KETOAN` / *Phòng Kế toán* (tenant `demo-corp`). UI hiển 
    └───────┬───────┘           └───────────────┘           └───────────────┘
            │
            ▼
-   Users: cntt_cv, cntt_ld, dept_user
+   Loại tài khoản: cntt_chuyenvien, cntt_lanhdao (không gán PB)
+                 dept_user → gán PB + chuyenvien|lanhdao (§11.1)
    (PKI verify dùng CA đã upload của demo-corp)
 ```
 
@@ -496,10 +497,11 @@ tenants ──1:1── tenant_settings
 | `department_id` | UUID FK | |
 | `role` | ENUM | `chuyenvien`, `lanhdao` |
 
-> **Policy Phase 4 (đã triển khai):**
-> - User `cntt_*` / `tenant_admin` **không** có bản ghi `user_dept_roles` — quyền theo `system_role`.
-> - User `dept_user` **bắt buộc** gán phòng ban để truy cập workflow phòng ban (§11.1); **một user chỉ thuộc một phòng ban** (unique `user_id` + một `department_id` active).
-> - Spec gốc ghi dept_user có thể thuộc 1+ dept — **Phase 4 chọn 1 dept/user** để đơn giản RLS Phase 6; nếu đổi policy cần sửa §11.4 và migration.
+> **Policy Phase 4 (đã triển khai — chi tiết §11.1):**
+> - **Loại tài khoản** (`system_role`): `platform_admin`, `tenant_admin`, `cntt_chuyenvien`, `cntt_lanhdao` → **không** có `user_dept_roles`; quyền theo §11.1.1.
+> - **Nhân viên phòng ban** (`dept_user`) → **bắt buộc** một bản ghi `user_dept_roles` với `role` ∈ `chuyenvien` | `lanhdao` để có capability phòng ban (§11.1.2).
+> - **Một `dept_user` / một phòng ban** — gán PB thứ hai trả **409**; API chỉ chấp nhận gán PB cho `dept_user`.
+> - Spec gốc ghi `dept_user` có thể thuộc 1+ dept — **Phase 4 chọn 1 dept/user** để đơn giản RLS Phase 6; nếu đổi policy cần sửa §11.1 và migration.
 
 ### 5.9. Bảng `export_templates` (Phase 8)
 
@@ -667,7 +669,7 @@ t_{tenant_slug}_d_{dept_code}_ld   # Ban NV lãnh đạo
 **Deliverables:**
 - [ ] Auth API + brute-force lock (5 lần)
 - [ ] **UI Login:** split layout (brand panel + form), show/hide password, loading state, lỗi rõ ràng
-- [ ] **UI Dashboard:** welcome card, quick stats placeholder, sidebar menu theo `system_role`
+- [ ] **UI Dashboard:** welcome card, quick stats placeholder, sidebar menu theo capability (§11.1)
 - [ ] Session timeout configurable (default 8h)
 
 **Gate 1:**
@@ -764,7 +766,7 @@ t_{tenant_slug}_d_{dept_code}_ld   # Ban NV lãnh đạo
 
 **Gate 4:** CRUD OK; `/auth/me` phản ánh dept; UI empty state khi chưa có dept; URL trái quyền → 403; `cntt_lanhdao` không sửa `tenant_admin`.
 
-**Phụ thuộc:** Gate 3 (demo tenant có thể bỏ qua SSO/PKI — xem §11.4)
+**Phụ thuộc:** Gate 3 (demo tenant có thể bỏ qua SSO/PKI — xem §12)
 
 ---
 
@@ -836,7 +838,7 @@ AND dept_code = '{{ current_user_dept() }}'
 
 **Tiêu chí kiểm duyệt (Gate 6):**
 - [ ] User dept A query dataset → chỉ rows dept A
-- [ ] CNTT LD (không gắn dept) → policy rõ: thấy all tenant hoặc không — **document & implement 1 lựa chọn**
+- [ ] `cntt_lanhdao` (không có `user_dept_roles` — §11.1.0) → RLS Superset: thấy all tenant hoặc không — **document & implement 1 lựa chọn**
 - [ ] SQL Lab (cntt_cv) có RLS khi flag bật
 
 **Phụ thuộc:** Phase 5 OK
@@ -1030,7 +1032,7 @@ Body tạo phòng ban:
 }
 ```
 
-#### 8.3.3. Người dùng — `tenant_admin`, `cntt_lanhdao` (hạn chế gán role — §11.4)
+#### 8.3.3. Người dùng — `tenant_admin`, `cntt_lanhdao` (hạn chế IAM — §11.1.5)
 
 | Method | Path | Capability | Mô tả |
 |---|---|---|---|
@@ -1053,7 +1055,7 @@ Body tạo user:
 }
 ```
 
-Body gán phòng ban (chỉ `dept_user`):
+Body gán phòng ban (**chỉ** khi `system_role = dept_user`; một user / một phòng ban):
 
 ```json
 {
@@ -1062,7 +1064,14 @@ Body gán phòng ban (chỉ `dept_user`):
 }
 ```
 
-#### 8.3.4. `/auth/me` — phản ánh phòng ban (Phase 4)
+| `system_role` khi tạo user | Gán phòng ban? | `role` hợp lệ |
+|---|---|---|
+| `tenant_admin` | ❌ | — |
+| `cntt_chuyenvien` | ❌ | — |
+| `cntt_lanhdao` | ❌ | — |
+| `dept_user` | ✅ (bước riêng sau tạo user) | `chuyenvien` \| `lanhdao` |
+
+#### 8.3.4. `/auth/me` — phản ánh loại tài khoản + phòng ban (Phase 4)
 
 ```json
 {
@@ -1179,52 +1188,99 @@ Trước khi chuyển Phase, reviewer xác nhận:
 
 **App Shell** (§14.4) — menu sidebar và route guard theo **capability** (§11.4). Ẩn menu + chặn URL trực tiếp (trang 403).
 
+#### 11.1.0. Hai lớp phân quyền (không trộn)
+
+Portal dùng **hai trường độc lập** — UI và API phải hiển thị / kiểm tra đúng từng lớp:
+
+| Lớp | Trường DB | Áp dụng cho | Mô tả |
+|---|---|---|---|
+| **Loại tài khoản** | `users.system_role` | Mọi user | Quyền **toàn tenant**: IAM, thiết kế mẫu CNTT, cài đặt SSO/PKI, … |
+| **Vai trò phòng ban** | `user_dept_roles.role` | Chỉ `dept_user` | Quyền **theo phòng ban đã gán**: xem mẫu, tạo giao dịch, duyệt tải file |
+
+**Quy tắc cứng (Phase 4–5, đã triển khai):**
+
+- `platform_admin`, `tenant_admin`, `cntt_chuyenvien`, `cntt_lanhdao` → **không** có bản ghi `user_dept_roles`; API `POST /users/{id}/dept-roles` trả **422** nếu target không phải `dept_user`.
+- `dept_user` → **bắt buộc** gán đúng **một** phòng ban (`user_dept_roles`) trước khi có menu workflow phòng ban (Phase 8+).
+- Nhãn UI **「Loại tài khoản」** map `system_role`; cột **「Phòng ban」** / **「Vai trò trong phòng ban」** chỉ có ý nghĩa với `dept_user` (các loại khác hiển thị «Chưa gán» / ẩn form gán PB).
+
 #### 11.1.1. Loại tài khoản (`system_role`) — nhãn UI
 
-| `system_role` | Nhãn UI (vi) | Nhãn UI (en) | Ghi chú |
-|---|---|---|---|
-| `platform_admin` | Quản trị nền tảng | Platform operator | Tenant `platform` |
-| `tenant_admin` | Quản trị doanh nghiệp | Organization admin | IAM đầy đủ trong tenant |
-| `cntt_chuyenvien` | Chuyên viên thiết kế mẫu | Template designer | Không IAM |
-| `cntt_lanhdao` | Lãnh đạo duyệt mẫu | Template approver | IAM (trừ `tenant_admin`) |
-| `dept_user` | Nhân viên phòng ban | Department staff | Cần `user_dept_roles` |
+| `system_role` | Nhãn UI (vi) | Nhãn UI (en) | Mô tả ngắn (UI) | Gán phòng ban? | Capability mặc định |
+|---|---|---|---|---|---|
+| `platform_admin` | Quản trị nền tảng | Platform operator | — | ❌ | `platform.tenants` |
+| `tenant_admin` | Quản trị doanh nghiệp | Organization admin | Cấu hình SSO/PKI, quản lý phòng ban và người dùng | ❌ | `tenant.settings`, `iam.admin`, `audit.read` |
+| `cntt_chuyenvien` | Chuyên viên thiết kế mẫu | Template designer | Soạn và quản lý mẫu kết xuất dữ liệu | ❌ | `cntt.templates` |
+| `cntt_lanhdao` | Lãnh đạo duyệt mẫu | Template approver | Duyệt mẫu trước khi chia sẻ cho các phòng ban | ❌ | `iam.admin`, `cntt.templates`, `cntt.approvals`, `audit.read` |
+| `dept_user` | Nhân viên phòng ban | Department staff | Tạo giao dịch kết xuất theo mẫu đã được duyệt | ✅ **bắt buộc** | *(qua `user_dept_roles` — §11.1.2)* |
+
+> **Thuật ngữ:** `cntt_*` là mã nội bộ backend/Superset (`t_{slug}_cntt_cv|ld`). Trên UI Portal **không** hiển thị chữ «CNTT» — dùng nhãn *Chuyên viên thiết kế mẫu* / *Lãnh đạo duyệt mẫu*.
 
 #### 11.1.2. Vai trò trong phòng ban (`user_dept_roles.role`)
 
-| `role` | Nhãn UI | Workflow (Phase 8+) |
+**Chỉ áp dụng khi `system_role = dept_user`.** Mỗi user tối đa **một** cặp `(department_id, role)`.
+
+| `role` | Nhãn UI (vi) | Nhãn UI (en) | Workflow (Phase 8+) | Capability bổ sung |
+|---|---|---|---|---|
+| `chuyenvien` | Chuyên viên | Specialist | Xem mẫu PB, tạo & gửi giao dịch kết xuất | `dept.templates`, `dept.transactions` |
+| `lanhdao` | Lãnh đạo | Leader | + Duyệt giao dịch & tải file (qua Portal API) | `dept.templates`, `dept.transactions`, `dept.approvals` |
+
+`dept_user` **chưa gán phòng ban** → không có capability phòng ban; sidebar chỉ **Tổng quan** + **Trạng thái hệ thống** (và các mục không yêu cầu PB).
+
+#### 11.1.3. Ma trận tổng hợp — loại tài khoản × phòng ban
+
+Bảng **kết quả quyền** sau khi `has_capability()` (backend) / `hasCapability()` (frontend):
+
+| `system_role` | `user_dept_roles` | Menu / quyền nổi bật |
 |---|---|---|
-| `chuyenvien` | Chuyên viên | Mẫu PB, giao dịch kết xuất |
-| `lanhdao` | Lãnh đạo | + Duyệt & tải file |
+| `platform_admin` | — | `/platform/tenants` |
+| `tenant_admin` | — | `/admin/settings`, `/admin/departments`, `/admin/users`, `/audit` |
+| `cntt_chuyenvien` | — *(không gán PB)* | `/cntt/templates` |
+| `cntt_lanhdao` | — *(không gán PB)* | `/cntt/templates`, `/cntt/approvals`, `/admin/departments`, `/admin/users`, `/audit` |
+| `dept_user` | chưa gán PB | Chỉ `/dashboard`, `/health-ui` |
+| `dept_user` | `KETOAN` + `chuyenvien` | + `/dept/templates`, `/dept/transactions` *(Phase 8–10)* |
+| `dept_user` | `KETOAN` + `lanhdao` | + `/dept/approvals` *(Phase 11)* |
 
-#### 11.1.3. Ma trận menu × capability
+**Ví dụ seed `demo-corp`:**
 
-| Menu | Route | Capability | Ai được phép |
+| User | `system_role` | Phòng ban | `user_dept_roles.role` | Superset role (Phase 5) |
+|---|---|---|---|---|
+| `admin@demo-corp` | `tenant_admin` | — | — | *(không sync)* |
+| `cntt.cv@demo-corp` | `cntt_chuyenvien` | — | — | `t_demo-corp_cntt_cv` |
+| `cntt.ld@demo-corp` | `cntt_lanhdao` | — | — | `t_demo-corp_cntt_ld` |
+| `ketoan.cv@demo-corp` | `dept_user` | `KETOAN` | `chuyenvien` | `t_demo-corp_d_KETOAN_cv` |
+| `ketoan.ld@demo-corp` | `dept_user` | `KETOAN` | `lanhdao` | `t_demo-corp_d_KETOAN_ld` |
+
+#### 11.1.4. Ma trận menu × capability
+
+| Menu | Route | Capability | Điều kiện (đủ **một** dòng) |
 |---|---|---|---|
-| Tổng quan | `/dashboard` | — | Tất cả user đã đăng nhập |
-| Quản lý doanh nghiệp | `/platform/tenants` | `platform.tenants` | `platform_admin` |
-| Cài đặt tenant | `/admin/settings` | `tenant.settings` | `tenant_admin` |
-| Phòng ban | `/admin/departments` | `iam.admin` | `tenant_admin`, `cntt_lanhdao` |
-| Người dùng | `/admin/users` | `iam.admin` | `tenant_admin`, `cntt_lanhdao` |
-| Mẫu kết xuất | `/cntt/templates` | `cntt.templates` | `cntt_chuyenvien`, `cntt_lanhdao` |
+| Tổng quan | `/dashboard` | — | Mọi user đã đăng nhập |
+| Quản lý doanh nghiệp | `/platform/tenants` | `platform.tenants` | `system_role = platform_admin` |
+| Cài đặt tenant | `/admin/settings` | `tenant.settings` | `system_role = tenant_admin` |
+| Phòng ban | `/admin/departments` | `iam.admin` | `tenant_admin` **hoặc** `cntt_lanhdao` |
+| Người dùng | `/admin/users` | `iam.admin` | `tenant_admin` **hoặc** `cntt_lanhdao` |
+| Mẫu kết xuất | `/cntt/templates` | `cntt.templates` | `cntt_chuyenvien` **hoặc** `cntt_lanhdao` |
 | Duyệt mẫu kết xuất | `/cntt/approvals` | `cntt.approvals` | `cntt_lanhdao` |
-| Mẫu của phòng ban | `/dept/templates` | `dept.templates` | `dept_user` + đã gán PB + (`chuyenvien` hoặc `lanhdao`) |
-| Giao dịch kết xuất | `/dept/transactions` | `dept.transactions` | `dept_user` + đã gán PB + (`chuyenvien` hoặc `lanhdao`) |
+| Mẫu của phòng ban | `/dept/templates` | `dept.templates` | `dept_user` + đã gán PB + (`chuyenvien` **hoặc** `lanhdao`) |
+| Giao dịch kết xuất | `/dept/transactions` | `dept.transactions` | `dept_user` + đã gán PB + (`chuyenvien` **hoặc** `lanhdao`) |
 | Chờ duyệt & Tải file | `/dept/approvals` | `dept.approvals` | `dept_user` + đã gán PB + `lanhdao` |
-| Nhật ký | `/audit` | `audit.read` | `tenant_admin`, `cntt_lanhdao` |
-| Trạng thái hệ thống | `/health-ui` | — | Tất cả |
+| Nhật ký | `/audit` | `audit.read` | `tenant_admin` **hoặc** `cntt_lanhdao` |
+| Trạng thái hệ thống | `/health-ui` | — | Mọi user đã đăng nhập |
 
-**Lưu ý:** `dept_user` **chưa gán phòng ban** chỉ thấy Tổng quan / Health — không có menu workflow phòng ban.
+> **Phase 4–5:** Route `/dept/*` chưa có UI — `dept_user` đã gán PB vẫn **không thấy** menu đó cho đến Phase 8+. Capability đã sẵn sàng trên `/auth/me` + policy.
 
-#### 11.1.4. Hạn chế IAM bổ sung (Phase 4)
+#### 11.1.5. Hạn chế IAM (Phase 4)
 
-| Hành động | `tenant_admin` | `cntt_lanhdao` |
-|---|---|---|
-| Tạo / sửa / vô hiệu `tenant_admin` | ✅ | ❌ |
-| Tạo / sửa `dept_user`, `cntt_*` | ✅ | ✅ |
-| Gán `user_dept_roles` | ✅ | ✅ (trừ target `tenant_admin`) |
-| Cài đặt SSO/PKI | ✅ | ❌ |
+| Hành động | `tenant_admin` | `cntt_lanhdao` | Ghi chú |
+|---|---|---|---|
+| Tạo / sửa / vô hiệu `tenant_admin` | ✅ | ❌ | Chỉ `tenant_admin` gán được `tenant_admin` |
+| Tạo / sửa `dept_user`, `cntt_*` | ✅ | ✅ | Cần `iam.admin` |
+| Gán / sửa `user_dept_roles` | ✅ | ✅ | **Chỉ** target `dept_user`; tối đa 1 phòng ban / user |
+| Gỡ `user_dept_roles` | ✅ | ✅ | Target không được là `tenant_admin` |
+| Sửa user `tenant_admin` | ✅ | ❌ | `can_modify_user` |
+| Cài đặt SSO/PKI | ✅ | ❌ | `tenant.settings` |
 
-Header cố định: **logo tenant** · tên user · **dept badge** (mã phòng ban nếu có) · đăng xuất · (optional) vi/en.
+Header cố định: **logo tenant** · tên user · **badge phòng ban** (mã PB, vd. `KETOAN`, nếu `dept_user` đã gán) · đăng xuất · (optional) vi/en.
 
 ### 11.2. Mã sự kiện audit (tham chiếu)
 
@@ -1240,6 +1296,7 @@ Header cố định: **logo tenant** · tên user · **dept badge** (mã phòng 
 | `DEPT_CREATED` | 4 |
 | `DEPT_UPDATED` | 4 |
 | `DEPT_DEACTIVATED` | 4 |
+| `DEPT_REACTIVATED` | 4–5 |
 | `USER_CREATED` | 4 |
 | `USER_UPDATED` | 4 |
 | `USER_DEPT_ROLE_ASSIGNED` | 4 |
@@ -1316,20 +1373,24 @@ Request API / Navigate URL
 
 #### 11.4.4. Kiểm thử nhanh (Gate 4)
 
-| User | Hành động | Kỳ vọng |
-|---|---|---|
-| `admin@demo-corp` | GET `/admin/settings` (UI) | 200 |
-| `admin@demo-corp` | GET `/admin/users` (UI) | 200 |
-| `cntt.cv@demo-corp` | GET `/admin/users` (UI) | Trang 403 |
-| `cntt.ld@demo-corp` | GET `/admin/users` (UI) | 200 |
-| `cntt.ld@demo-corp` | GET `/admin/settings` (UI) | Trang 403 |
-| `cntt.ld@demo-corp` | POST `/users` tạo `tenant_admin` | API 403 |
-| `ketoan.cv@demo-corp` | Sidebar menu | Chỉ Tổng quan + Health *(route `/dept/*` Phase 10+)* |
-| `ketoan.ld@demo-corp` | `/auth/me` | Có `departments[].role = lanhdao` |
+| User | `system_role` | PB / `dept_role` | Hành động | Kỳ vọng |
+|---|---|---|---|---|
+| `admin@demo-corp` | `tenant_admin` | — | GET `/admin/settings` | 200 |
+| `admin@demo-corp` | `tenant_admin` | — | GET `/admin/users` | 200 |
+| `cntt.cv@demo-corp` | `cntt_chuyenvien` | — | GET `/admin/users` | Trang 403 |
+| `cntt.cv@demo-corp` | `cntt_chuyenvien` | — | GET `/cntt/templates` | 200 *(Phase 8+)* |
+| `cntt.ld@demo-corp` | `cntt_lanhdao` | — | GET `/admin/users` | 200 |
+| `cntt.ld@demo-corp` | `cntt_lanhdao` | — | GET `/admin/settings` | Trang 403 |
+| `cntt.ld@demo-corp` | `cntt_lanhdao` | — | POST `/users` tạo `tenant_admin` | API 403 |
+| `cntt.ld@demo-corp` | `cntt_lanhdao` | — | POST `/users/{cntt.cv}/dept-roles` | API 422 *(chỉ `dept_user`)* |
+| `ketoan.cv@demo-corp` | `dept_user` | `KETOAN` / `chuyenvien` | `/auth/me` | `departments[]` có `KETOAN`, `chuyenvien` |
+| `ketoan.cv@demo-corp` | `dept_user` | `KETOAN` / `chuyenvien` | Sidebar (Phase 4–7) | Tổng quan + Health *(menu `/dept/*` từ Phase 8+)* |
+| `ketoan.ld@demo-corp` | `dept_user` | `KETOAN` / `lanhdao` | `has_capability(dept.approvals)` | `true` |
+| `ketoan.cv@demo-corp` | `dept_user` | `KETOAN` / `chuyenvien` | `has_capability(dept.approvals)` | `false` |
 
 ---
 
-### 11.4. Ghi chú triển khai tuần tự login
+### 11.5. Ghi chú triển khai tuần tự login
 
 ```
 Phase 1 ──▶ Phase 2 ──▶ Phase 3
@@ -2142,6 +2203,6 @@ Tạo trong `portal/frontend/src/components/` — **reuse**, không duplicate:
 
 ---
 
-**Phiên bản:** 1.4  
+**Phiên bản:** 1.5  
 **Cập nhật:** 2026-06-07  
-**Trạng thái:** Phase 0–4 triển khai (Gate 4). Tiếp theo: Phase 5 provisioning Superset. UI: §14. Auth: §12. K8s: §13. Multi-tenant: §2.2. Phân quyền: §11.1, §11.4.
+**Trạng thái:** Phase 0–5 triển khai (Gate 5 provisioning). Phân quyền: §11.1 (loại tài khoản × phòng ban). UI: §14. Auth: §12. K8s: §13. Multi-tenant: §2.2.
