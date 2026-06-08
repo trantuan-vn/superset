@@ -289,12 +289,41 @@
   "dashboard": {
     "title": "Overview",
     "welcome": "Welcome, {{name}}",
-    "description": "You are working in {{tenant}}. Workflow features will be added in upcoming phases.",
-    "phase": "Phase 1 — Login & Session",
+    "description": "You are working in {{tenant}}.",
+    "deptUnassigned": "Your account is not assigned to a department yet. Contact an administrator to get access.",
+    "loadError": "Some overview figures could not be loaded. Try refreshing the page.",
+    "quickLinks": "Go to",
+    "build": "UI build: {{id}}",
+    "roleDescription": {
+      "platform_admin": "Manage organizations and platform-wide settings."
+    },
     "stats": {
-      "pendingApprovals": "Pending approvals",
+      "tenants": "Organizations",
+      "activeTenants": "Active",
+      "departments": "Departments",
+      "users": "Users",
+      "activeUsers": "Active users",
       "templates": "Export templates",
-      "completed": "Completed"
+      "draftTemplates": "Drafts",
+      "inReview": "Awaiting approval",
+      "pendingApprovals": "Pending approvals",
+      "publishedTemplates": "Published",
+      "availableTemplates": "Available templates",
+      "myTransactions": "My transactions",
+      "pendingTransactions": "Awaiting approval",
+      "draftTransactions": "Draft transactions",
+      "completedTransactions": "Completed"
+    },
+    "links": {
+      "tenants": "Organizations",
+      "departments": "Departments",
+      "users": "Users",
+      "settings": "Authentication settings",
+      "templates": "Export templates",
+      "cnttApprovals": "Template approvals",
+      "deptTemplates": "Department templates",
+      "transactions": "Export transactions",
+      "deptApprovals": "Pending approvals"
     }
   },
   "health": {
@@ -483,6 +512,8 @@
   },
   "deptTransactions": {
     "title": "Export transactions",
+    "subtitle": "Specialists create and submit requests — leaders approve under Approvals & downloads.",
+    "draftHint": "Draft transactions are not visible to leaders. Click Submit for approval to add them to the queue.",
     "empty": "No transactions yet",
     "submit": "Submit for approval",
     "submitted": "Submitted to department leader",
@@ -501,7 +532,9 @@
   },
   "deptApprovals": {
     "title": "Export approval queue",
+    "subtitle": "Only transactions submitted by specialists (Submitted status) appear here.",
     "empty": "No pending transactions",
+    "emptyHint": "Ask the department specialist to click Submit for approval on the Export transactions page. Drafts do not appear here.",
     "approve": "Approve",
     "reject": "Reject",
     "approved": "Transaction approved",

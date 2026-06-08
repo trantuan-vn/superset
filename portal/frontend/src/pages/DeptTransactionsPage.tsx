@@ -17,7 +17,7 @@
  * under the License.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Space, Table, message } from 'antd';
+import { Alert, Button, Space, Table, message } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { useTranslation } from 'react-i18next';
 
@@ -137,9 +137,22 @@ export function DeptTransactionsPage() {
     return <LoadingSkeleton variant="form" rows={4} />;
   }
 
+  const hasDrafts = (txnsQuery.data ?? []).some((txn) => txn.status === 'draft');
+
   return (
     <div>
-      <PageHeader title={t('deptTransactions.title')} />
+      <PageHeader
+        title={t('deptTransactions.title')}
+        subtitle={t('deptTransactions.subtitle')}
+      />
+      {hasDrafts ? (
+        <Alert
+          type="info"
+          showIcon
+          message={t('deptTransactions.draftHint')}
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
       <Table
         rowKey="id"
         columns={columns}

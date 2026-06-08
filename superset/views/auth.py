@@ -37,18 +37,20 @@ class SupersetAuthView(BaseSupersetView, AuthView):
     @expose("/")
     @no_cache
     def login(self, provider: Optional[str] = None) -> WerkzeugResponse:
-        if g.user is not None and g.user.is_authenticated:
-            next_path = request.args.get("next")
-            if next_path and next_path.startswith("/") and not next_path.startswith("//"):
-                return redirect(next_path)
-            return redirect(self.appbuilder.get_url_for_index)
-
+        # Portal Launch Bridge must run even when a Superset session already
+        # exists — otherwise a prior user's permissions leak to the next launch.
         launch_redirect = try_portal_launch_login(
             request,
             fallback_url=self.appbuilder.get_url_for_index,
         )
         if launch_redirect is not None:
             return launch_redirect
+
+        if g.user is not None and g.user.is_authenticated:
+            next_path = request.args.get("next")
+            if next_path and next_path.startswith("/") and not next_path.startswith("//"):
+                return redirect(next_path)
+            return redirect(self.appbuilder.get_url_for_index)
 
         return super().render_app_template()
 

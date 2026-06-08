@@ -22,8 +22,8 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import jwt
-from flask import current_app, redirect
-from flask_login import login_user
+from flask import current_app, g, redirect
+from flask_login import login_user, logout_user
 from werkzeug.wrappers import Response as WerkzeugResponse
 
 if TYPE_CHECKING:
@@ -116,6 +116,14 @@ def try_portal_launch_login(
     if user is None or not user.is_active:
         logger.warning("Portal launch user not found or inactive: %s", username)
         return None
+
+    current = getattr(g, "user", None)
+    if (
+        current is not None
+        and current.is_authenticated
+        and current.username != username
+    ):
+        logout_user()
 
     login_user(user, remember=False)
     security_manager.on_user_login(user)

@@ -92,6 +92,8 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
       target: frontend
+      args:
+        VITE_BUILD_ID: ${VITE_BUILD_ID:-2026-06-08-dashboard}
     container_name: portal-web
     ports:
       - "3000:80"

@@ -188,6 +188,11 @@ export function AppShell() {
             {primaryDept ? (
               <Tag color="blue">{primaryDept.department_code}</Tag>
             ) : null}
+            {primaryDept?.role ? (
+              <Tag color={primaryDept.role === 'lanhdao' ? 'gold' : 'default'}>
+                {t(`adminUsers.deptRole.${primaryDept.role}`)}
+              </Tag>
+            ) : null}
           </div>
 
           <div className={styles.headerRight}>

@@ -289,12 +289,41 @@
   "dashboard": {
     "title": "Tổng quan",
     "welcome": "Xin chào, {{name}}",
-    "description": "Bạn đang làm việc tại {{tenant}}. Các chức năng workflow sẽ được bổ sung ở các Phase tiếp theo.",
-    "phase": "Phase 1 — Đăng nhập & Session",
+    "description": "Bạn đang làm việc tại {{tenant}}.",
+    "deptUnassigned": "Tài khoản chưa được gán phòng ban. Liên hệ quản trị để được phân quyền.",
+    "loadError": "Không tải được một số số liệu tổng quan. Hãy thử tải lại trang.",
+    "quickLinks": "Đi tới",
+    "build": "Phiên bản giao diện: {{id}}",
+    "roleDescription": {
+      "platform_admin": "Quản lý doanh nghiệp và cấu hình toàn nền tảng."
+    },
     "stats": {
-      "pendingApprovals": "Chờ duyệt",
+      "tenants": "Doanh nghiệp",
+      "activeTenants": "Đang hoạt động",
+      "departments": "Phòng ban",
+      "users": "Người dùng",
+      "activeUsers": "Đang hoạt động",
       "templates": "Mẫu kết xuất",
-      "completed": "Hoàn thành"
+      "draftTemplates": "Bản nháp",
+      "inReview": "Chờ duyệt mẫu",
+      "pendingApprovals": "Chờ duyệt",
+      "publishedTemplates": "Đã phát hành",
+      "availableTemplates": "Mẫu khả dụng",
+      "myTransactions": "Giao dịch của tôi",
+      "pendingTransactions": "GD chờ duyệt",
+      "draftTransactions": "GD nháp",
+      "completedTransactions": "Hoàn thành"
+    },
+    "links": {
+      "tenants": "Quản lý doanh nghiệp",
+      "departments": "Phòng ban",
+      "users": "Người dùng",
+      "settings": "Cài đặt xác thực",
+      "templates": "Mẫu kết xuất",
+      "cnttApprovals": "Duyệt mẫu",
+      "deptTemplates": "Mẫu phòng ban",
+      "transactions": "Giao dịch kết xuất",
+      "deptApprovals": "Chờ duyệt & tải file"
     }
   },
   "health": {
@@ -483,6 +512,8 @@
   },
   "deptTransactions": {
     "title": "Giao dịch kết xuất",
+    "subtitle": "Chuyên viên tạo và gửi duyệt — lãnh đạo phòng ban duyệt tại mục «Chờ duyệt & Tải file».",
+    "draftHint": "Giao dịch ở trạng thái Nháp chưa hiển thị với lãnh đạo. Bấm «Gửi duyệt» để đưa vào hàng chờ.",
     "empty": "Chưa có giao dịch",
     "submit": "Gửi duyệt",
     "submitted": "Đã gửi duyệt lãnh đạo phòng ban",
@@ -501,7 +532,9 @@
   },
   "deptApprovals": {
     "title": "Duyệt giao dịch kết xuất",
+    "subtitle": "Chỉ hiển thị giao dịch chuyên viên đã gửi duyệt (trạng thái Đã gửi).",
     "empty": "Không có giao dịch chờ duyệt",
+    "emptyHint": "Yêu cầu chuyên viên phòng ban bấm «Gửi duyệt» trên trang Giao dịch kết xuất. Giao dịch Nháp không xuất hiện ở đây.",
     "approve": "Duyệt",
     "reject": "Từ chối",
     "approved": "Đã duyệt giao dịch",

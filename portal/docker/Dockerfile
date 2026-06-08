@@ -47,7 +47,9 @@ RUN npm install
 COPY frontend/ .
 
 # Empty base URL — nginx proxies /health to the API service
-ENV VITE_API_URL=
+ARG VITE_BUILD_ID=dev
+ENV VITE_API_URL= \
+    VITE_BUILD_ID=$VITE_BUILD_ID
 RUN npm run build
 
 # ---- Frontend (nginx) ----

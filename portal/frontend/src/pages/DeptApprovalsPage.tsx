@@ -17,7 +17,7 @@
  * under the License.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Form, Input, Modal, Space, Table, Typography, message } from 'antd';
+import { Alert, Button, Form, Input, Modal, Space, Table, Typography, message } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -188,13 +188,28 @@ export function DeptApprovalsPage() {
     return <LoadingSkeleton variant="form" rows={4} />;
   }
 
+  const pending = pendingQuery.data ?? [];
+  const isEmpty = pending.length === 0;
+
   return (
     <div>
-      <PageHeader title={t('deptApprovals.title')} />
+      <PageHeader
+        title={t('deptApprovals.title')}
+        subtitle={t('deptApprovals.subtitle')}
+      />
+      {isEmpty ? (
+        <Alert
+          type="info"
+          showIcon
+          message={t('deptApprovals.empty')}
+          description={t('deptApprovals.emptyHint')}
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
       <Table
         rowKey="id"
         columns={columns}
-        dataSource={pendingQuery.data ?? []}
+        dataSource={pending}
         locale={{ emptyText: t('deptApprovals.empty') }}
         pagination={{ pageSize: 10 }}
         scroll={{ x: true }}

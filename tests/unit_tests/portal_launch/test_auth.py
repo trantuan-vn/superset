@@ -107,3 +107,37 @@ def test_try_portal_launch_login_redirects(launch_app: Flask) -> None:
     assert response.location == "/superset/dashboard/5/"
     mock_login.assert_called_once_with(mock_user, remember=False)
     mock_sm.on_user_login.assert_called_once_with(mock_user)
+
+
+def test_try_portal_launch_login_switches_user(launch_app: Flask) -> None:
+    """Prior Superset session must not block a launch JWT for another user."""
+    token = _mint_token(sub="t_demo-corp__cntt.cv@demo-corp")
+    mock_user = MagicMock()
+    mock_user.is_active = True
+    mock_user.username = "t_demo-corp__cntt.cv@demo-corp"
+    mock_sm = MagicMock()
+    mock_sm.find_user.return_value = mock_user
+
+    prior_user = MagicMock()
+    prior_user.is_authenticated = True
+    prior_user.username = "t_demo-corp__cntt.ld@demo-corp"
+
+    with launch_app.test_request_context(
+        f"/login/?portal_launch={token}&next=/superset/dashboard/5/"
+    ):
+        with (
+            patch("superset.security_manager", mock_sm),
+            patch("superset.portal_launch.auth.g") as mock_g,
+            patch("superset.portal_launch.auth.logout_user") as mock_logout,
+            patch("superset.portal_launch.auth.login_user") as mock_login,
+        ):
+            mock_g.user = prior_user
+            response = try_portal_launch_login(
+                launch_app.request,
+                fallback_url="/superset/welcome/",
+            )
+
+    assert response is not None
+    assert response.status_code == 302
+    mock_logout.assert_called_once()
+    mock_login.assert_called_once_with(mock_user, remember=False)
