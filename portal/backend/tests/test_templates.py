@@ -219,6 +219,19 @@ def test_preview_validates_sql() -> None:
         app.dependency_overrides.clear()
 
 
+def test_delete_template_draft() -> None:
+    cv = _user(SystemRole.CNTT_CHUYENVIEN)
+    db_template = _template(creator=cv)
+    app.dependency_overrides[get_current_user_with_dept_roles] = lambda: cv
+    try:
+        with patch("app.api.templates.delete_template") as delete_mock:
+            response = client.delete(f"/templates/{db_template.id}")
+        assert response.status_code == 204
+        delete_mock.assert_called_once()
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_pending_list_requires_approver() -> None:
     cv = _user(SystemRole.CNTT_CHUYENVIEN)
     app.dependency_overrides[get_current_user_with_dept_roles] = lambda: cv

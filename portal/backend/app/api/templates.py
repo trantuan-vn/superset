@@ -50,6 +50,7 @@ from app.templates.service import (
     TemplateListFilters,
     approve_template,
     create_template,
+    delete_template,
     get_template,
     get_template_launch_url,
     list_templates,
@@ -191,6 +192,24 @@ def get_template_api(
         raise _handle_template_error(exc) from exc
     names = _creator_names(db, [template])
     return _to_response(db, template, creator_names=names)
+
+
+@router.delete("/{template_id}", status_code=204)
+def delete_template_api(
+    template_id: uuid.UUID,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user_with_dept_roles)],
+) -> None:
+    try:
+        delete_template(
+            db,
+            user,
+            template_id,
+            ip_address=_client_ip(request),
+        )
+    except TemplateError as exc:
+        raise _handle_template_error(exc) from exc
 
 
 @router.patch("/{template_id}", response_model=TemplateResponse)

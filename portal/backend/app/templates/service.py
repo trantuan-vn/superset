@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.sql_validator import validate_read_only_sql
@@ -31,6 +31,7 @@ from app.audit.service import write_audit_log
 from app.auth.policy import Capability, has_capability
 from app.config import get_settings
 from app.models.export_template import ExportTemplate, TemplateShareMode, TemplateStatus
+from app.models.export_transaction import ExportTransaction
 from app.models.tenant import Tenant, TenantSettings
 from app.models.user import SystemRole, User
 from app.provisioning.superset_client import SupersetClient, SupersetClientError
@@ -590,6 +591,46 @@ def sync_template_dashboard(
         ip_address=ip_address,
     )
     return template
+
+
+def delete_template(
+    db: Session,
+    user: User,
+    template_id: uuid.UUID,
+    *,
+    ip_address: str | None = None,
+) -> None:
+    template = _get_template_or_raise(db, user.tenant_id, template_id)
+    _assert_creator(user, template)
+    if template.status != TemplateStatus.DRAFT:
+        raise TemplateError("Only draft templates can be deleted", status_code=409)
+
+    txn_count = db.scalar(
+        select(func.count())
+        .select_from(ExportTransaction)
+        .where(ExportTransaction.template_id == template.id)
+    )
+    if txn_count:
+        raise TemplateError(
+            "Template has export transactions and cannot be deleted",
+            status_code=409,
+        )
+
+    template_name = template.name
+    template_id_str = str(template.id)
+    db.delete(template)
+    db.commit()
+
+    write_audit_log(
+        db,
+        tenant_id=user.tenant_id,
+        action="TEMPLATE_DELETED",
+        entity_type="export_template",
+        entity_id=template_id_str,
+        actor_id=user.id,
+        payload={"name": template_name},
+        ip_address=ip_address,
+    )
 
 
 def get_template_launch_url(
