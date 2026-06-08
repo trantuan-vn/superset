@@ -17,28 +17,31 @@
  * under the License.
  */
 import {
+  AuditOutlined,
+  CheckSquareOutlined,
   DashboardOutlined,
+  FileTextOutlined,
   HeartOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuOutlined,
   MenuUnfoldOutlined,
   SettingOutlined,
-  TeamOutlined,
-  FileTextOutlined,
-  AuditOutlined,
-  CheckSquareOutlined,
   SwapOutlined,
+  TeamOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
-import { Button, Drawer, Dropdown, Grid, Layout, Menu, Segmented, Space, Tag } from 'antd';
+import { Avatar, Button, Drawer, Dropdown, Grid, Layout, Menu, Space } from 'antd';
 import type { MenuProps } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
+import { ThemeProvider } from '@/design-system/ThemeProvider';
+import { layout as layoutTokens } from '@/design-system/tokens';
+import { PortalLogo } from '@/components/PortalLogo';
 import { useAuth } from '@/features/auth/useAuth';
 import { navItemsForUser } from '@/features/auth/navConfig';
-import { layout as layoutTokens } from '@/design-system/tokens';
 
 import styles from './AppShell.module.css';
 
@@ -49,7 +52,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   '/dashboard': <DashboardOutlined aria-hidden />,
   '/admin/settings': <SettingOutlined aria-hidden />,
   '/admin/departments': <TeamOutlined aria-hidden />,
-  '/admin/users': <TeamOutlined aria-hidden />,
+  '/admin/users': <UserOutlined aria-hidden />,
   '/cntt/templates': <FileTextOutlined aria-hidden />,
   '/cntt/approvals': <CheckSquareOutlined aria-hidden />,
   '/dept/templates': <FileTextOutlined aria-hidden />,
@@ -58,6 +61,19 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   '/audit': <AuditOutlined aria-hidden />,
   '/health-ui': <HeartOutlined aria-hidden />,
 };
+
+function userInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return '?';
+  }
+  const first = parts[0] ?? '';
+  if (parts.length === 1) {
+    return first.slice(0, 2).toUpperCase();
+  }
+  const last = parts[parts.length - 1] ?? '';
+  return `${first[0] ?? ''}${last[0] ?? ''}`.toUpperCase() || '?';
+}
 
 export function AppShell() {
   const { t, i18n } = useTranslation();
@@ -116,9 +132,27 @@ export function AppShell() {
 
   const userMenuItems: MenuProps['items'] = [
     {
+      key: 'profile',
+      label: (
+        <div className={styles.userMenuHeader}>
+          <strong>{user?.display_name}</strong>
+          {tenant ? <span>{tenant.name}</span> : null}
+          {primaryDept ? (
+            <span>
+              {primaryDept.department_code} ·{' '}
+              {t(`adminUsers.deptRole.${primaryDept.role}`)}
+            </span>
+          ) : null}
+        </div>
+      ),
+      disabled: true,
+    },
+    { type: 'divider' },
+    {
       key: 'logout',
       icon: <LogoutOutlined />,
       label: t('auth.logout'),
+      danger: true,
       onClick: () => {
         void handleLogout();
       },
@@ -127,113 +161,142 @@ export function AppShell() {
 
   const appTitle = tenant?.branding?.app_name ?? t('app.name');
   const primaryColor = tenant?.branding?.primary_color;
+  const logoUrl = tenant?.branding?.logo_url;
 
   const sidebarContent = (
-    <Menu
-      theme="dark"
-      mode="inline"
-      selectedKeys={[selectedKey]}
-      items={menuItems}
-      onClick={handleMenuClick}
-    />
+    <>
+      <div className={`${styles.sidebarBrand} ${collapsed ? styles.sidebarBrandCollapsed : ''}`}>
+        {logoUrl ? (
+          <img src={logoUrl} alt="" className={styles.sidebarLogo} />
+        ) : (
+          <PortalLogo
+            size={collapsed ? 'sm' : 'md'}
+            accentColor={primaryColor}
+            className={styles.sidebarLogoMark}
+          />
+        )}
+        {!collapsed ? (
+          <div className={styles.sidebarBrandText}>
+            <span className={styles.sidebarAppName}>{appTitle}</span>
+            {tenant ? <span className={styles.sidebarTenant}>{tenant.name}</span> : null}
+          </div>
+        ) : null}
+      </div>
+      <Menu
+        mode="inline"
+        selectedKeys={[selectedKey]}
+        items={menuItems}
+        onClick={handleMenuClick}
+        className={styles.sidebarMenu}
+      />
+    </>
   );
 
   return (
-    <Layout className={styles.shell}>
-      {!isMobile && (
-        <Sider
-          collapsible
-          collapsed={collapsed}
-          onCollapse={setCollapsed}
-          width={layoutTokens.sidebarWidth}
-          collapsedWidth={layoutTokens.sidebarCollapsedWidth}
-          trigger={null}
+    <ThemeProvider branding={tenant?.branding}>
+      <Layout className={styles.shell}>
+        {!isMobile && (
+          <Sider
+            collapsible
+            collapsed={collapsed}
+            onCollapse={setCollapsed}
+            width={layoutTokens.sidebarWidth}
+            collapsedWidth={layoutTokens.sidebarCollapsedWidth}
+            trigger={null}
+            className={styles.sider}
+          >
+            {sidebarContent}
+          </Sider>
+        )}
+
+        <Layout className={styles.mainLayout}>
+          <Header className={styles.header}>
+            <div className={styles.headerLeft}>
+              {isMobile ? (
+                <Button
+                  type="text"
+                  icon={<MenuOutlined />}
+                  aria-label={t('common.openMenu')}
+                  className={styles.mobileMenuButton}
+                  onClick={() => setDrawerOpen(true)}
+                />
+              ) : (
+                <Button
+                  type="text"
+                  icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                  aria-label={
+                    collapsed ? t('common.expandSidebar') : t('common.collapseSidebar')
+                  }
+                  className={styles.collapseButton}
+                  onClick={toggleCollapsed}
+                />
+              )}
+              {isMobile ? (
+                <span className={styles.mobileTitle}>{appTitle}</span>
+              ) : null}
+            </div>
+
+            <div className={styles.headerRight}>
+              <Space size="middle">
+                <div className={styles.langSwitch} role="group" aria-label={t('header.language')}>
+                  {(['vi', 'en'] as const).map((lang) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      className={`${styles.langButton} ${
+                        (lang === 'vi' && i18n.language.startsWith('vi')) ||
+                        (lang === 'en' && !i18n.language.startsWith('vi'))
+                          ? styles.langButtonActive
+                          : ''
+                      }`}
+                      onClick={() => {
+                        void i18n.changeLanguage(lang);
+                      }}
+                    >
+                      {lang.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <Dropdown menu={{ items: userMenuItems }} trigger={['click']}>
+                  <button
+                    type="button"
+                    className={styles.userButton}
+                    aria-label={t('header.userMenu')}
+                  >
+                    <Avatar
+                      size={36}
+                      className={styles.userAvatar}
+                      style={primaryColor ? { background: primaryColor } : undefined}
+                    >
+                      {user?.display_name ? userInitials(user.display_name) : '?'}
+                    </Avatar>
+                    {!isMobile && user?.display_name ? (
+                      <span className={styles.userName}>{user.display_name}</span>
+                    ) : null}
+                  </button>
+                </Dropdown>
+              </Space>
+            </div>
+          </Header>
+
+          <Content className={styles.content}>
+            <div className={styles.contentWrapper}>
+              <Outlet />
+            </div>
+          </Content>
+        </Layout>
+
+        <Drawer
+          title={appTitle}
+          placement="left"
+          onClose={() => setDrawerOpen(false)}
+          open={drawerOpen}
+          styles={{ body: { padding: 0 } }}
+          className={styles.mobileDrawer}
         >
           {sidebarContent}
-        </Sider>
-      )}
-
-      <Layout>
-        <Header className={styles.header}>
-          <div className={styles.headerLeft}>
-            {isMobile ? (
-              <Button
-                type="text"
-                icon={<MenuOutlined />}
-                aria-label={t('common.openMenu')}
-                className={styles.mobileMenuButton}
-                onClick={() => setDrawerOpen(true)}
-              />
-            ) : (
-              <Button
-                type="text"
-                icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                aria-label={
-                  collapsed ? t('common.expandSidebar') : t('common.collapseSidebar')
-                }
-                onClick={toggleCollapsed}
-              />
-            )}
-            <span
-              className={styles.logoMark}
-              style={primaryColor ? { background: primaryColor } : undefined}
-              aria-hidden
-            >
-              P
-            </span>
-            <h1 className={styles.appTitle}>{appTitle}</h1>
-            {tenant ? (
-              <Tag className={styles.tenantBadge}>{tenant.name}</Tag>
-            ) : null}
-            {primaryDept ? (
-              <Tag color="blue">{primaryDept.department_code}</Tag>
-            ) : null}
-            {primaryDept?.role ? (
-              <Tag color={primaryDept.role === 'lanhdao' ? 'gold' : 'default'}>
-                {t(`adminUsers.deptRole.${primaryDept.role}`)}
-              </Tag>
-            ) : null}
-          </div>
-
-          <div className={styles.headerRight}>
-            <Space size="small">
-              <Segmented
-                size="small"
-                aria-label={t('header.language')}
-                options={[
-                  { label: 'vi', value: 'vi' },
-                  { label: 'en', value: 'en' },
-                ]}
-                value={i18n.language.startsWith('vi') ? 'vi' : 'en'}
-                onChange={(value) => {
-                  void i18n.changeLanguage(String(value));
-                }}
-              />
-              <Dropdown menu={{ items: userMenuItems }} trigger={['click']}>
-                <Button type="text" aria-label={t('header.userMenu')}>
-                  {user?.display_name ?? t('header.userMenu')}
-                </Button>
-              </Dropdown>
-            </Space>
-          </div>
-        </Header>
-
-        <Content>
-          <div className={styles.contentWrapper}>
-            <Outlet />
-          </div>
-        </Content>
+        </Drawer>
       </Layout>
-
-      <Drawer
-        title={appTitle}
-        placement="left"
-        onClose={() => setDrawerOpen(false)}
-        open={drawerOpen}
-        styles={{ body: { padding: 0 } }}
-      >
-        {sidebarContent}
-      </Drawer>
-    </Layout>
+    </ThemeProvider>
   );
 }

@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Export Portal",
-    "tagline": "Enterprise data export approval workflow"
+    "tagline": "Enterprise data export and approval platform"
   },
   "nav": {
     "overview": "Overview",
@@ -38,7 +38,22 @@
     "passwordRequired": "Password is required",
     "ssoButton": "Sign in with SSO",
     "ldapLoginButton": "Sign in with LDAP",
-    "orLocalLogin": "or sign in with account"
+    "orLocalLogin": "or sign in with account",
+    "trustNote": "Enterprise security · SSO · LDAP · Digital signature",
+    "features": {
+      "security": {
+        "title": "Multi-layer security",
+        "desc": "SSO, LDAP, digital certificates, and role-based access"
+      },
+      "workflow": {
+        "title": "Transparent approval workflow",
+        "desc": "Track status, approval history, and data exports"
+      },
+      "enterprise": {
+        "title": "Enterprise-ready",
+        "desc": "Multi-tenant, white-label, and Superset integration"
+      }
+    }
   },
   "pki": {
     "title": "Digital certificate verification",
@@ -338,7 +353,8 @@
   "common": {
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
-    "openMenu": "Open navigation menu"
+    "openMenu": "Open navigation menu",
+    "cancel": "Cancel"
   },
   "forbidden": {
     "title": "Access denied",
@@ -354,6 +370,23 @@
     "emptyAiOff": "Enter SQL manually — AI is disabled for your organization.",
     "loadFailed": "Could not load templates.",
     "view": "Open",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirmTitle": "Delete template?",
+    "deleteConfirmDesc": "Draft \"{{name}}\" will be permanently removed.",
+    "deleteConfirm": "Delete",
+    "deleteSuccess": "Template deleted",
+    "deleteFailed": "Could not delete template",
+    "createModalTitle": "New template draft",
+    "createModalHint": "Enter a name to start designing SQL in Template Studio.",
+    "createModalConfirm": "Create draft",
+    "createNameLabel": "Template name",
+    "createNameRequired": "Template name is required",
+    "createNamePlaceholder": "e.g. Monthly revenue export",
+    "createDescLabel": "Description (optional)",
+    "createDescPlaceholder": "Short description for approvers",
+    "createSuccess": "Template draft created",
+    "createFailed": "Could not create template",
     "columns": {
       "name": "Name",
       "status": "Status",

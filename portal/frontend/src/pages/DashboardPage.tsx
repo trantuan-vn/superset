@@ -17,6 +17,7 @@
  * under the License.
  */
 import {
+  ArrowRightOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   FileTextOutlined,
@@ -24,18 +25,21 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Alert, Button, Card, Col, Row, Space, Statistic, Tag, Typography } from 'antd';
+import { Alert, Col, Row, Tag, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { PageHeader } from '@/components/PageHeader';
+import { StatCard } from '@/components/StatCard';
 import {
   resolveDashboardProfile,
   useDashboardStats,
 } from '@/features/dashboard/useDashboardStats';
 import { useAuth } from '@/features/auth/useAuth';
+
+import styles from './DashboardPage.module.css';
 
 const STAT_ICONS: Record<string, ReactNode> = {
   tenants: <TeamOutlined />,
@@ -53,6 +57,16 @@ const STAT_ICONS: Record<string, ReactNode> = {
   pendingTransactions: <ClockCircleOutlined />,
   draftTransactions: <FileTextOutlined />,
   completedTransactions: <CheckCircleOutlined />,
+};
+
+const STAT_ACCENTS: Record<string, 'blue' | 'green' | 'amber' | 'slate'> = {
+  pendingApprovals: 'amber',
+  pendingTransactions: 'amber',
+  inReview: 'amber',
+  publishedTemplates: 'green',
+  completedTransactions: 'green',
+  activeTenants: 'green',
+  activeUsers: 'green',
 };
 
 function roleDescriptionKey(profile: ReturnType<typeof resolveDashboardProfile>): string {
@@ -87,34 +101,36 @@ export function DashboardPage() {
         breadcrumb={[{ title: t('dashboard.title') }]}
       />
 
-      <Card style={{ marginBottom: 24 }}>
-        <Space wrap size={[8, 8]} style={{ marginBottom: 12 }}>
-          <Tag color="blue">{roleLabel}</Tag>
-          {primaryDept ? (
-            <Tag>
-              {primaryDept.department_code} ·{' '}
-              {t(`adminUsers.deptRole.${primaryDept.role}`)}
-            </Tag>
-          ) : null}
-        </Space>
-        <Typography.Title level={3} style={{ marginTop: 0, marginBottom: 8 }}>
-          {t('dashboard.welcome', { name: user?.display_name ?? '' })}
-        </Typography.Title>
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          {t('dashboard.description', { tenant: tenant?.name ?? '' })}
-        </Typography.Paragraph>
-        {profile && profile !== 'dept_unassigned' ? (
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            {t(roleDescriptionKey(profile))}
+      <section className={styles.hero}>
+        <div className={styles.heroContent}>
+          <div className={styles.heroTags}>
+            <Tag className={styles.roleTag}>{roleLabel}</Tag>
+            {primaryDept ? (
+              <Tag className={styles.deptTag}>
+                {primaryDept.department_code} ·{' '}
+                {t(`adminUsers.deptRole.${primaryDept.role}`)}
+              </Tag>
+            ) : null}
+          </div>
+          <Typography.Title level={2} className={styles.heroTitle}>
+            {t('dashboard.welcome', { name: user?.display_name ?? '' })}
+          </Typography.Title>
+          <Typography.Paragraph className={styles.heroDesc}>
+            {t('dashboard.description', { tenant: tenant?.name ?? '' })}
           </Typography.Paragraph>
-        ) : null}
-      </Card>
+          {profile && profile !== 'dept_unassigned' ? (
+            <Typography.Paragraph className={styles.heroHint}>
+              {t(roleDescriptionKey(profile))}
+            </Typography.Paragraph>
+          ) : null}
+        </div>
+      </section>
 
       {error ? (
         <Alert
           type="warning"
           showIcon
-          style={{ marginBottom: 24 }}
+          className={styles.alert}
           message={t('dashboard.loadError')}
         />
       ) : null}
@@ -124,13 +140,13 @@ export function DashboardPage() {
       ) : null}
 
       {profile !== 'dept_unassigned' ? (
-        <Row gutter={[16, 16]} style={{ marginBottom: quickLinks.length ? 24 : 0 }}>
+        <Row gutter={[16, 16]} className={styles.statsRow}>
           {isLoading
             ? [0, 1, 2].map((i) => (
                 <Col key={i} xs={24} sm={8}>
-                  <Card>
+                  <div className={styles.skeletonCard}>
                     <LoadingSkeleton variant="text" rows={2} />
-                  </Card>
+                  </div>
                 </Col>
               ))
             : stats.map((stat) => (
@@ -139,39 +155,39 @@ export function DashboardPage() {
                   xs={24}
                   sm={stats.length <= 2 ? 12 : 8}
                 >
-                  <Card
-                    hoverable={Boolean(stat.link)}
+                  <StatCard
+                    title={t(stat.titleKey)}
+                    value={stat.value}
+                    icon={STAT_ICONS[stat.key] ?? <FileTextOutlined />}
+                    accent={STAT_ACCENTS[stat.key] ?? 'blue'}
                     onClick={stat.link ? () => navigate(stat.link!) : undefined}
-                    style={stat.link ? { cursor: 'pointer' } : undefined}
-                  >
-                    <Statistic
-                      title={t(stat.titleKey)}
-                      value={stat.value}
-                      prefix={STAT_ICONS[stat.key] ?? <FileTextOutlined />}
-                    />
-                  </Card>
+                  />
                 </Col>
               ))}
         </Row>
       ) : null}
 
       {quickLinks.length > 0 ? (
-        <Card title={t('dashboard.quickLinks')}>
-          <Space wrap>
+        <section className={styles.quickLinks}>
+          <h2 className={styles.quickLinksTitle}>{t('dashboard.quickLinks')}</h2>
+          <div className={styles.quickLinksGrid}>
             {quickLinks.map((link) => (
-              <Button key={link.key} type="link" onClick={() => navigate(link.path)}>
-                {t(link.labelKey)}
-              </Button>
+              <button
+                key={link.key}
+                type="button"
+                className={styles.quickLinkCard}
+                onClick={() => navigate(link.path)}
+              >
+                <span>{t(link.labelKey)}</span>
+                <ArrowRightOutlined aria-hidden />
+              </button>
             ))}
-          </Space>
-        </Card>
+          </div>
+        </section>
       ) : null}
 
       {import.meta.env.VITE_BUILD_ID ? (
-        <Typography.Text
-          type="secondary"
-          style={{ display: 'block', marginTop: 24, fontSize: 12 }}
-        >
+        <Typography.Text type="secondary" className={styles.buildInfo}>
           {t('dashboard.build', { id: import.meta.env.VITE_BUILD_ID })}
         </Typography.Text>
       ) : null}

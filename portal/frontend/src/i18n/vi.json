@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Portal Kết xuất",
-    "tagline": "Quy trình duyệt và kết xuất dữ liệu doanh nghiệp"
+    "tagline": "Nền tảng quy trình duyệt và kết xuất dữ liệu cho doanh nghiệp"
   },
   "nav": {
     "overview": "Tổng quan",
@@ -38,7 +38,22 @@
     "passwordRequired": "Vui lòng nhập mật khẩu",
     "ssoButton": "Đăng nhập SSO",
     "ldapLoginButton": "Đăng nhập LDAP",
-    "orLocalLogin": "hoặc đăng nhập bằng tài khoản"
+    "orLocalLogin": "hoặc đăng nhập bằng tài khoản",
+    "trustNote": "Tuân thủ bảo mật doanh nghiệp · SSO · LDAP · Chữ ký số",
+    "features": {
+      "security": {
+        "title": "Bảo mật đa lớp",
+        "desc": "SSO, LDAP, chứng thư số và phân quyền theo vai trò"
+      },
+      "workflow": {
+        "title": "Quy trình duyệt minh bạch",
+        "desc": "Theo dõi trạng thái, lịch sử phê duyệt và kết xuất dữ liệu"
+      },
+      "enterprise": {
+        "title": "Sẵn sàng doanh nghiệp",
+        "desc": "Multi-tenant, white-label và tích hợp Superset"
+      }
+    }
   },
   "pki": {
     "title": "Xác thực chứng thư số",
@@ -338,7 +353,8 @@
   "common": {
     "collapseSidebar": "Thu gọn menu",
     "expandSidebar": "Mở rộng menu",
-    "openMenu": "Mở menu điều hướng"
+    "openMenu": "Mở menu điều hướng",
+    "cancel": "Hủy"
   },
   "forbidden": {
     "title": "Không có quyền truy cập",
@@ -354,6 +370,23 @@
     "emptyAiOff": "Nhập SQL thủ công — AI đang tắt cho tổ chức của bạn.",
     "loadFailed": "Không tải được danh sách mẫu.",
     "view": "Mở",
+    "edit": "Sửa",
+    "delete": "Xóa",
+    "deleteConfirmTitle": "Xóa mẫu?",
+    "deleteConfirmDesc": "Bản nháp \"{{name}}\" sẽ bị xóa vĩnh viễn.",
+    "deleteConfirm": "Xóa",
+    "deleteSuccess": "Đã xóa mẫu",
+    "deleteFailed": "Không xóa được mẫu",
+    "createModalTitle": "Tạo nháp mẫu mới",
+    "createModalHint": "Nhập tên mẫu để bắt đầu thiết kế SQL trong Template Studio.",
+    "createModalConfirm": "Tạo nháp",
+    "createNameLabel": "Tên mẫu",
+    "createNameRequired": "Bắt buộc nhập tên mẫu",
+    "createNamePlaceholder": "VD: Kết xuất doanh thu tháng",
+    "createDescLabel": "Mô tả (tùy chọn)",
+    "createDescPlaceholder": "Mô tả ngắn cho lãnh đạo duyệt",
+    "createSuccess": "Đã tạo nháp mẫu",
+    "createFailed": "Không tạo được mẫu",
     "columns": {
       "name": "Tên mẫu",
       "status": "Trạng thái",

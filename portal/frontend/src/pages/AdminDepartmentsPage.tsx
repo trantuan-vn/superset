@@ -43,6 +43,8 @@ import {
   type Department,
   type DepartmentStatus,
 } from '@/api/departments';
+import { AdminToolbar } from '@/components/AdminToolbar';
+import { ContentPanel } from '@/components/ContentPanel';
 import { PageHeader } from '@/components/PageHeader';
 import { useAuth } from '@/features/auth/useAuth';
 
@@ -260,23 +262,23 @@ export function AdminDepartmentsPage() {
               {t('adminDepartments.retry')}
             </Button>
           }
-          style={{ marginBottom: 16 }}
+          className="pageAlert"
         />
       ) : null}
 
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-        <Input.Search
-          allowClear
-          placeholder={t('adminDepartments.searchPlaceholder')}
-          onSearch={setSearch}
-          style={{ maxWidth: 360 }}
-        />
-
+      <ContentPanel noPadding>
+        <div style={{ padding: '20px 24px' }}>
+          <AdminToolbar
+            searchPlaceholder={t('adminDepartments.searchPlaceholder')}
+            onSearch={setSearch}
+          />
+        </div>
         <Table<Department>
           rowKey="id"
           loading={isLoading}
           columns={columns}
           dataSource={data ?? []}
+          pagination={{ pageSize: 10, showSizeChanger: true }}
           locale={{
             emptyText: (
               <Empty
@@ -286,7 +288,7 @@ export function AdminDepartmentsPage() {
             ),
           }}
         />
-      </Space>
+      </ContentPanel>
 
       <Drawer
         title={

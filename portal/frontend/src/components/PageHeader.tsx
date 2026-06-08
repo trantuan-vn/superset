@@ -16,8 +16,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { Breadcrumb, Typography } from 'antd';
 import type { ReactNode } from 'react';
+
+import styles from './PageHeader.module.css';
 
 interface PageHeaderProps {
   title: string;
@@ -28,37 +29,30 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, breadcrumb, extra }: PageHeaderProps) {
   return (
-    <div style={{ marginBottom: 24 }}>
-      {breadcrumb && breadcrumb.length > 0 && (
-        <Breadcrumb
-          style={{ marginBottom: 8 }}
-          items={breadcrumb.map((item) => ({
-            title: item.title,
-            href: item.href,
-          }))}
-        />
-      )}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <Typography.Title level={2} style={{ margin: 0 }}>
-            {title}
-          </Typography.Title>
-          {subtitle ? (
-            <Typography.Paragraph type="secondary" style={{ margin: '4px 0 0' }}>
-              {subtitle}
-            </Typography.Paragraph>
-          ) : null}
+    <header className={styles.header}>
+      {breadcrumb && breadcrumb.length > 0 ? (
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          {breadcrumb.map((item, index) => (
+            <span key={`${item.title}-${index}`} className={styles.breadcrumbItem}>
+              {index > 0 ? <span className={styles.breadcrumbSep}>/</span> : null}
+              {item.href ? (
+                <a href={item.href} className={styles.breadcrumbLink}>
+                  {item.title}
+                </a>
+              ) : (
+                <span className={styles.breadcrumbCurrent}>{item.title}</span>
+              )}
+            </span>
+          ))}
+        </nav>
+      ) : null}
+      <div className={styles.row}>
+        <div className={styles.textBlock}>
+          <h1 className={styles.title}>{title}</h1>
+          {subtitle ? <p className={styles.subtitle}>{subtitle}</p> : null}
         </div>
-        {extra}
+        {extra ? <div className={styles.extra}>{extra}</div> : null}
       </div>
-    </div>
+    </header>
   );
 }

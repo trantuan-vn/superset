@@ -1,5 +1,23 @@
 :root {
-  --portal-primary: #1677ff;
+  --portal-primary: #2563eb;
+  --portal-primary-hover: #1d4ed8;
+  --portal-text: #0f172a;
+  --portal-text-secondary: #475569;
+  --portal-text-tertiary: #94a3b8;
+  --portal-border: #e2e8f0;
+  --portal-border-secondary: #f1f5f9;
+  --portal-bg-layout: #f8fafc;
+  --portal-bg-container: #ffffff;
+  --portal-bg-elevated: #ffffff;
+  --portal-sidebar: #ffffff;
+  --portal-sidebar-active: #eff6ff;
+  --portal-radius: 8px;
+  --portal-radius-lg: 12px;
+  --portal-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --portal-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --portal-shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.12);
+  --portal-font: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
 }
 
 *,
@@ -16,17 +34,22 @@ body,
 
 body {
   margin: 0;
-  font-family:
-    'Inter',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--portal-font);
   -webkit-font-smoothing: antialiased;
-  background: #f5f7fa;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--portal-bg-layout);
+  color: var(--portal-text);
 }
 
 :focus-visible {
   outline: 2px solid var(--portal-primary);
   outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--portal-primary) 20%, transparent);
+}
+
+.pageAlert {
+  margin-bottom: 20px;
 }

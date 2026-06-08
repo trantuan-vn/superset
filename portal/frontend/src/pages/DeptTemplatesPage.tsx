@@ -17,7 +17,8 @@
  * under the License.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Card, Col, Form, Input, Modal, Row, Space, Tag, Typography, message } from 'antd';
+import { Button, Col, Form, Input, Modal, Row, Tag, message } from 'antd';
+import { FileTextOutlined } from '@ant-design/icons';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -28,6 +29,8 @@ import {
   createTransaction,
   fetchDeptTemplates,
 } from '@/api/transactions';
+import { ContentPanel } from '@/components/ContentPanel';
+import { EmptyState } from '@/components/EmptyState';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { PageHeader } from '@/components/PageHeader';
 import { openSupersetLaunch } from '@/components/ShareScopePicker';
@@ -36,6 +39,8 @@ import {
   isDeptLeader,
   permissionContextFromUser,
 } from '@/features/auth/permissions';
+
+import styles from '@/components/TemplateCard.module.css';
 
 export function DeptTemplatesPage() {
   const { t } = useTranslation();
@@ -83,57 +88,84 @@ export function DeptTemplatesPage() {
   });
 
   if (templatesQuery.isLoading) {
-    return <LoadingSkeleton variant="form" rows={4} />;
+    return (
+      <>
+        <PageHeader
+          title={t('deptTemplates.title')}
+          subtitle={
+            isLeader ? t('deptTemplates.subtitleLeader') : t('deptTemplates.subtitle')
+          }
+        />
+        <ContentPanel>
+          <LoadingSkeleton variant="form" rows={4} />
+        </ContentPanel>
+      </>
+    );
   }
 
   const templates = templatesQuery.data ?? [];
 
   return (
-    <div>
-      <PageHeader title={t('deptTemplates.title')} />
-      <Typography.Paragraph type="secondary">
-        {isLeader ? t('deptTemplates.subtitleLeader') : t('deptTemplates.subtitle')}
-      </Typography.Paragraph>
+    <>
+      <PageHeader
+        title={t('deptTemplates.title')}
+        subtitle={
+          isLeader ? t('deptTemplates.subtitleLeader') : t('deptTemplates.subtitle')
+        }
+      />
 
       {templates.length === 0 ? (
-        <Typography.Text type="secondary">{t('deptTemplates.empty')}</Typography.Text>
+        <ContentPanel>
+          <EmptyState
+            title={t('deptTemplates.empty')}
+            icon={<FileTextOutlined />}
+          />
+        </ContentPanel>
       ) : (
         <Row gutter={[16, 16]}>
           {templates.map((template) => (
             <Col key={template.id} xs={24} md={12} lg={8}>
-              <Card title={template.name}>
-                <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                  <Typography.Text type="secondary">
-                    {template.superset_dashboard_title ?? template.name}
-                  </Typography.Text>
-                  {template.shared_departments && template.shared_departments.length > 0 ? (
-                    <Space wrap>
-                      {template.shared_departments.map((dept) => (
-                        <Tag key={dept.id}>{dept.code}</Tag>
-                      ))}
-                    </Space>
-                  ) : null}
-                  <Space wrap>
+              <article className={styles.card}>
+                <div className={styles.header}>
+                  <span className={styles.iconWrap} aria-hidden>
+                    <FileTextOutlined />
+                  </span>
+                  <div className={styles.titleBlock}>
+                    <h3 className={styles.title}>{template.name}</h3>
+                    <p className={styles.subtitle}>
+                      {template.superset_dashboard_title ?? template.name}
+                    </p>
+                  </div>
+                </div>
+                {template.shared_departments && template.shared_departments.length > 0 ? (
+                  <div className={styles.tags}>
+                    {template.shared_departments.map((dept) => (
+                      <Tag key={dept.id} className={styles.tag}>
+                        {dept.code}
+                      </Tag>
+                    ))}
+                  </div>
+                ) : null}
+                <div className={styles.actions}>
+                  <Button
+                    onClick={() => launchMutation.mutate(template.id)}
+                    loading={launchMutation.isPending}
+                  >
+                    {t('deptTemplates.viewSuperset')}
+                  </Button>
+                  {!isLeader ? (
                     <Button
-                      onClick={() => launchMutation.mutate(template.id)}
-                      loading={launchMutation.isPending}
+                      type="primary"
+                      onClick={() => {
+                        setSelectedTemplateId(template.id);
+                        setExportOpen(true);
+                      }}
                     >
-                      {t('deptTemplates.viewSuperset')}
+                      {t('deptTemplates.requestExport')}
                     </Button>
-                    {!isLeader ? (
-                      <Button
-                        type="primary"
-                        onClick={() => {
-                          setSelectedTemplateId(template.id);
-                          setExportOpen(true);
-                        }}
-                      >
-                        {t('deptTemplates.requestExport')}
-                      </Button>
-                    ) : null}
-                  </Space>
-                </Space>
-              </Card>
+                  ) : null}
+                </div>
+              </article>
             </Col>
           ))}
         </Row>
@@ -151,9 +183,9 @@ export function DeptTemplatesPage() {
         confirmLoading={createTxnMutation.isPending}
         okText={t('deptTemplates.exportModalConfirm')}
       >
-        <Typography.Paragraph type="secondary">
+        <p style={{ color: 'var(--portal-text-secondary)', marginBottom: 16 }}>
           {t('deptTemplates.exportModalHint')}
-        </Typography.Paragraph>
+        </p>
         <Form
           form={exportForm}
           layout="vertical"
@@ -176,6 +208,6 @@ export function DeptTemplatesPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </>
   );
 }

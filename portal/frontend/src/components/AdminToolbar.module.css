@@ -1,0 +1,33 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.search {
+  max-width: 360px;
+  flex: 1 1 240px;
+}
+
+.search :global(.ant-input-affix-wrapper) {
+  border-radius: var(--portal-radius);
+  border-color: var(--portal-border);
+  background: var(--portal-bg-layout);
+}
+
+.search :global(.ant-input-affix-wrapper:hover),
+.search :global(.ant-input-affix-wrapper-focused) {
+  border-color: color-mix(in srgb, var(--portal-primary) 45%, var(--portal-border));
+  background: var(--portal-bg-container);
+}
+
+.searchIcon {
+  color: var(--portal-text-tertiary);
+}
+
+.extra {
+  flex-shrink: 0;
+}

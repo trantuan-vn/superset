@@ -1,0 +1,28 @@
+.panel {
+  background: var(--portal-bg-container);
+  border: 1px solid var(--portal-border);
+  border-radius: var(--portal-radius-lg);
+  box-shadow: var(--portal-shadow-sm);
+  padding: 20px 24px;
+  overflow: hidden;
+}
+
+.noPadding {
+  padding: 0;
+}
+
+.noPadding :global(.ant-table-wrapper) {
+  border-radius: inherit;
+}
+
+.noPadding :global(.ant-table) {
+  border-radius: inherit;
+}
+
+.noPadding :global(.ant-table-thead > tr > th:first-child) {
+  border-start-start-radius: var(--portal-radius-lg);
+}
+
+.noPadding :global(.ant-table-thead > tr > th:last-child) {
+  border-start-end-radius: var(--portal-radius-lg);
+}

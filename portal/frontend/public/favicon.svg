@@ -1,4 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#1677ff"/>
-  <path d="M8 22V10h4.2l3.1 7.8L18.4 10H22v12h-3.2v-7.1L15.8 22H13l-3.6-7.1V22H8z" fill="#fff"/>
+  <defs>
+    <linearGradient id="favicon-grad" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1e3a8a"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#favicon-grad)"/>
+  <path
+    d="M10 10h7.5l3.5 3.5V22a1.5 1.5 0 0 1-1.5 1.5H10A1.5 1.5 0 0 1 8.5 22V11.5A1.5 1.5 0 0 1 10 10Z"
+    fill="#fff"
+    fill-opacity="0.96"
+  />
+  <path d="M17.5 10v3.5H21" fill="#fff" fill-opacity="0.35"/>
+  <path
+    d="M16 18v4.5M13.5 20.5 16 23l2.5-2.5"
+    stroke="#fff"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>

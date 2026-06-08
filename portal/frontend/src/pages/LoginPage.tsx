@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { ApiError, fetchLoginOptions, ssoLoginUrl } from '@/api/auth';
+import { BrandPanel } from '@/components/BrandPanel';
 import { useAuth } from '@/features/auth/useAuth';
 
 import styles from './LoginPage.module.css';
@@ -91,24 +92,28 @@ export function LoginPage() {
     }
   };
 
+  const renderFormCard = (children: React.ReactNode) => (
+    <section className={styles.formPanel}>
+      <div className={styles.formWrapper}>
+        <div className={styles.formHeader}>
+          <Typography.Title level={3} className={styles.formTitle}>
+            {t('auth.loginTitle')}
+          </Typography.Title>
+          <Typography.Paragraph className={styles.formSubtitle}>
+            {t('auth.loginSubtitle')}
+          </Typography.Paragraph>
+        </div>
+        {children}
+      </div>
+    </section>
+  );
+
   if (pkiPending && user) {
     return (
       <div className={styles.page}>
-        <section className={styles.brandPanel} aria-hidden={false}>
-          <div className={styles.brandContent}>
-            <span className={styles.logoMark}>P</span>
-            <Typography.Title level={2} className={styles.brandTitle}>
-              {t('app.name')}
-            </Typography.Title>
-            <Typography.Paragraph className={styles.brandTagline}>
-              {t('app.tagline')}
-            </Typography.Paragraph>
-          </div>
-        </section>
-
-        <section className={styles.formPanel}>
-          <div className={styles.formWrapper}>
-            <Typography.Title level={3}>{t('auth.loginTitle')}</Typography.Title>
+        <BrandPanel />
+        {renderFormCard(
+          <>
             <Alert
               type="info"
               showIcon
@@ -129,12 +134,12 @@ export function LoginPage() {
               size="large"
               loading={signingOut}
               onClick={() => void handleSignOutPending()}
-              style={{ marginTop: 8 }}
+              className={styles.secondaryButton}
             >
               {t('pki.signOutAndLogin')}
             </Button>
-          </div>
-        </section>
+          </>,
+        )}
       </div>
     );
   }
@@ -169,25 +174,10 @@ export function LoginPage() {
 
   return (
     <div className={styles.page}>
-      <section className={styles.brandPanel} aria-hidden={false}>
-        <div className={styles.brandContent}>
-          <span className={styles.logoMark}>P</span>
-          <Typography.Title level={2} className={styles.brandTitle}>
-            {t('app.name')}
-          </Typography.Title>
-          <Typography.Paragraph className={styles.brandTagline}>
-            {t('app.tagline')}
-          </Typography.Paragraph>
-        </div>
-      </section>
+      <BrandPanel />
 
-      <section className={styles.formPanel}>
-        <div className={styles.formWrapper}>
-          <Typography.Title level={3}>{t('auth.loginTitle')}</Typography.Title>
-          <Typography.Paragraph type="secondary">
-            {t('auth.loginSubtitle')}
-          </Typography.Paragraph>
-
+      {renderFormCard(
+        <>
           {error ? (
             <Alert
               type="error"
@@ -208,6 +198,7 @@ export function LoginPage() {
             }}
             onFinish={handleSubmit}
             disabled={isLoading}
+            className={styles.form}
           >
             <Form.Item
               name="tenant_slug"
@@ -218,6 +209,7 @@ export function LoginPage() {
                 autoComplete="organization"
                 aria-required
                 placeholder="demo-corp"
+                size="large"
               />
             </Form.Item>
 
@@ -236,7 +228,9 @@ export function LoginPage() {
             ) : null}
 
             {showSsoButton && showLocalForm ? (
-              <Divider plain>{t('auth.orLocalLogin')}</Divider>
+              <Divider plain className={styles.divider}>
+                {t('auth.orLocalLogin')}
+              </Divider>
             ) : null}
 
             {showLocalForm ? (
@@ -251,6 +245,7 @@ export function LoginPage() {
                   <Input
                     autoComplete="username"
                     aria-required
+                    size="large"
                     placeholder={
                       loginOptions?.sso_enabled &&
                       loginOptions?.auth_mode === 'ldap'
@@ -270,6 +265,7 @@ export function LoginPage() {
                   <Input.Password
                     autoComplete="current-password"
                     aria-required
+                    size="large"
                     iconRender={(visible) =>
                       visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
                     }
@@ -297,8 +293,8 @@ export function LoginPage() {
               </>
             ) : null}
           </Form>
-        </div>
-      </section>
+        </>,
+      )}
     </div>
   );
 }

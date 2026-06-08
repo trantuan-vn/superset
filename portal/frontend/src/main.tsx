@@ -17,14 +17,12 @@
  * under the License.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ConfigProvider } from 'antd';
-import viVN from 'antd/locale/vi_VN';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router-dom';
 
 import { router } from '@/app/router';
-import { defaultTheme } from '@/design-system/theme';
+import { ThemeProvider } from '@/design-system/ThemeProvider';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import '@/i18n';
 
@@ -47,11 +45,11 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ConfigProvider theme={defaultTheme} locale={viVN}>
+      <ThemeProvider>
         <AuthProvider>
           <RouterProvider router={router} />
         </AuthProvider>
-      </ConfigProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

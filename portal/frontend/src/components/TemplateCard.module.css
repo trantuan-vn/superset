@@ -1,0 +1,81 @@
+.card {
+  height: 100%;
+  background: var(--portal-bg-container);
+  border: 1px solid var(--portal-border);
+  border-radius: var(--portal-radius-lg);
+  box-shadow: var(--portal-shadow-sm);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.card:hover {
+  border-color: color-mix(in srgb, var(--portal-primary) 30%, var(--portal-border));
+  box-shadow: var(--portal-shadow-md);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.iconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--portal-primary) 10%, transparent);
+  color: var(--portal-primary);
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.titleBlock {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--portal-text);
+  line-height: 1.35;
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--portal-text-secondary);
+  line-height: 1.5;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag {
+  margin: 0;
+  border: none;
+  background: var(--portal-border-secondary);
+  color: var(--portal-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}

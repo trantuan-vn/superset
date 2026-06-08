@@ -166,6 +166,17 @@ export async function updateTemplate(
   });
 }
 
+export async function deleteTemplate(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/templates/${id}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    throw new ApiError(await parseError(response), response.status);
+  }
+}
+
 export async function submitTemplate(id: string): Promise<ExportTemplate> {
   return apiFetch<ExportTemplate>(`/templates/${id}/submit`, {
     method: 'POST',

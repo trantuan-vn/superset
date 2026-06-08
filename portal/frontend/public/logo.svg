@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Portal K¿t xu¥t">
+  <defs>
+    <linearGradient id="portal-logo-grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1e3a8a"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="url(#portal-logo-grad)"/>
+  <path
+    d="M15 14h11.5l5.5 5.5V33a2 2 0 0 1-2 2H15a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2Z"
+    fill="#fff"
+    fill-opacity="0.96"
+  />
+  <path d="M26.5 14v5.5H32" fill="#fff" fill-opacity="0.35"/>
+  <path
+    d="M24 27.5v7M20.5 31l3.5 3.5L27.5 31"
+    stroke="#fff"
+    stroke-width="2.25"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M18 22h12"
+    stroke="#2563eb"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    opacity="0.55"
+  />
+  <path
+    d="M18 25.5h8"
+    stroke="#2563eb"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    opacity="0.4"
+  />
+</svg>

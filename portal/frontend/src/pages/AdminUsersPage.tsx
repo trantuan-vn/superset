@@ -48,6 +48,8 @@ import {
   type PortalUser,
   type UserStatus,
 } from '@/api/users';
+import { AdminToolbar } from '@/components/AdminToolbar';
+import { ContentPanel } from '@/components/ContentPanel';
 import { PageHeader } from '@/components/PageHeader';
 import {
   canAssignSystemRole,
@@ -483,26 +485,29 @@ export function AdminUsersPage() {
               {t('adminUsers.retry')}
             </Button>
           }
-          style={{ marginBottom: 16 }}
+          className="pageAlert"
         />
       ) : null}
 
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-        <Input.Search
-          allowClear
-          placeholder={t('adminUsers.searchPlaceholder')}
-          onSearch={setSearch}
-          style={{ maxWidth: 360 }}
-        />
-
+      <ContentPanel noPadding>
+        <div style={{ padding: '20px 24px' }}>
+          <AdminToolbar
+            searchPlaceholder={t('adminUsers.searchPlaceholder')}
+            onSearch={setSearch}
+          />
+        </div>
         <Table<PortalUser>
           rowKey="id"
           loading={isLoading}
           columns={columns}
           dataSource={data ?? []}
           scroll={{ x: 960 }}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+          }}
         />
-      </Space>
+      </ContentPanel>
 
       {/* Create */}
       <Drawer

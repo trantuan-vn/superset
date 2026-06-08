@@ -1,0 +1,75 @@
+.header {
+  margin-bottom: 28px;
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.breadcrumbItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumbSep {
+  color: var(--portal-text-tertiary);
+  margin-inline: 2px;
+}
+
+.breadcrumbLink {
+  color: var(--portal-text-tertiary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.breadcrumbLink:hover {
+  color: var(--portal-primary);
+}
+
+.breadcrumbCurrent {
+  color: var(--portal-text-secondary);
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.textBlock {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--portal-text);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  font-size: 15px;
+  color: var(--portal-text-secondary);
+  line-height: 1.5;
+}
+
+.extra {
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .title {
+    font-size: 24px;
+  }
+}
