@@ -32,18 +32,62 @@ class RoleBlueprint(str, Enum):
 
 
 # Base Superset roles whose permissions are merged for each blueprint.
+# Dept roles use an explicit allowlist instead of cloning Gamma (SPEC §6.2).
 _BLUEPRINT_BASE_ROLES: dict[RoleBlueprint, tuple[str, ...]] = {
     RoleBlueprint.CNTT_CV: ("Alpha", "sql_lab"),
     RoleBlueprint.CNTT_LD: ("Alpha",),
-    RoleBlueprint.DEPT_CV: ("Gamma",),
-    RoleBlueprint.DEPT_LD: ("Gamma",),
+    RoleBlueprint.DEPT_CV: (),
+    RoleBlueprint.DEPT_LD: (),
 }
 
-# Permission names that must never be granted to Portal-managed roles.
+# Permission names stripped from every Portal-managed role (including CNTT).
 _EXPORT_PERMISSION_PREFIXES = (
     "can_export",
     "can_csv",
     "can_download",
+)
+
+# Dept users: view shared dashboards only (SPEC §6.2).
+# Aligned with Superset PUBLIC_ROLE_PERMISSIONS plus dataset read and session basics.
+# No menu_access, SQL Lab, Explore write, or export permissions.
+_DEPT_VIEW_PERMISSIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("can_read", "Dashboard"),
+        ("can_read", "Chart"),
+        ("can_read", "Dataset"),
+        ("can_dashboard", "Superset"),
+        ("can_slice", "Superset"),
+        ("can_explore_json", "Superset"),
+        ("can_dashboard_permalink", "Superset"),
+        ("can_read", "DashboardPermalinkRestApi"),
+        ("can_read", "DashboardFilterStateRestApi"),
+        ("can_write", "DashboardFilterStateRestApi"),
+        ("can_time_range", "Api"),
+        ("can_query_form_data", "Api"),
+        ("can_query", "Api"),
+        ("can_read", "CssTemplate"),
+        ("can_read", "Theme"),
+        ("can_read", "EmbeddedDashboard"),
+        ("can_read", "CurrentUserRestApi"),
+        ("can_get", "Datasource"),
+        ("can_external_metadata", "Datasource"),
+        ("can_read", "Annotation"),
+        ("can_read", "AnnotationLayerRestApi"),
+        ("can_read", "ExplorePermalinkRestApi"),
+        ("can_recent_activity", "Log"),
+        ("can_userinfo", "UserDBModelView"),
+    }
+)
+
+# Dept leaders may export from Superset dashboards/charts (not SQL Lab).
+# Omit can_export on Dashboard to avoid "Export as Example" / YAML zip flows.
+_DEPT_LD_EXPORT_PERMISSIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("can_export", "Chart"),
+        ("can_csv", "Superset"),
+        ("can_export_data", "Superset"),
+        ("can_export_image", "Superset"),
+    }
 )
 
 
@@ -106,6 +150,24 @@ def is_export_permission(permission_name: str) -> bool:
     return any(lowered.startswith(prefix) for prefix in _EXPORT_PERMISSION_PREFIXES)
 
 
+def is_dept_blueprint(blueprint: RoleBlueprint) -> bool:
+    return blueprint in (RoleBlueprint.DEPT_CV, RoleBlueprint.DEPT_LD)
+
+
+def dept_view_permission_allowed(
+    permission_name: str,
+    view_menu: str,
+    *,
+    blueprint: RoleBlueprint,
+) -> bool:
+    """Return True when a permission may be granted to a dept CV/LD role."""
+    if (permission_name, view_menu) in _DEPT_VIEW_PERMISSIONS:
+        return True
+    if blueprint == RoleBlueprint.DEPT_LD:
+        return (permission_name, view_menu) in _DEPT_LD_EXPORT_PERMISSIONS
+    return False
+
+
 def inactive_role_name(role_name: str) -> str:
     canonical = active_role_name(role_name)
     return f"{canonical}{_INACTIVE_SUFFIX}"
@@ -114,6 +176,34 @@ def inactive_role_name(role_name: str) -> str:
 def superset_username(tenant_slug: str, portal_username: str) -> str:
     """Unique Superset username scoped to tenant."""
     return f"t_{tenant_slug}__{portal_username}"
+
+
+def superset_username_candidates(
+    tenant_slug: str,
+    *,
+    portal_username: str,
+    email: str | None = None,
+) -> list[str]:
+    """Portal usernames that may map to the same Superset account."""
+    seen: set[str] = set()
+    candidates: list[str] = []
+
+    def add(portal_name: str) -> None:
+        normalized = portal_name.strip()
+        if not normalized:
+            return
+        ss_name = superset_username(tenant_slug, normalized)
+        if ss_name not in seen:
+            seen.add(ss_name)
+            candidates.append(ss_name)
+
+    if portal_username.endswith(".local"):
+        add(portal_username[: -len(".local")])
+    add(portal_username)
+    if email and email.strip().lower() != portal_username.strip().lower():
+        add(email.strip().lower())
+
+    return candidates
 
 
 def portal_user_needs_superset_sync(user: User) -> bool:

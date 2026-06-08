@@ -100,11 +100,11 @@ def has_capability(user: User, capability: Capability) -> bool:
     if not has_dept_assignment(user):
         return False
 
-    if capability in (
-        Capability.DEPT_TEMPLATES,
-        Capability.DEPT_TRANSACTIONS,
-    ):
+    if capability == Capability.DEPT_TEMPLATES:
         return is_dept_specialist(user) or is_dept_leader(user)
+
+    if capability == Capability.DEPT_TRANSACTIONS:
+        return is_dept_specialist(user)
 
     if capability == Capability.DEPT_APPROVALS:
         return is_dept_leader(user)

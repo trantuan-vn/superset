@@ -21,6 +21,12 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
 export type TemplateStatus = 'draft' | 'review' | 'published' | 'archived';
 
+export interface SharedDepartment {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface ExportTemplate {
   id: string;
   tenant_id: string;
@@ -30,11 +36,13 @@ export interface ExportTemplate {
   status: TemplateStatus;
   share_mode: 'ALL' | 'SELECTED' | null;
   share_scope_version: number;
+  shared_departments?: SharedDepartment[];
   reject_comment: string | null;
   created_by: string;
   created_by_name: string | null;
   published_by: string | null;
   superset_dashboard_id: number | null;
+  superset_dashboard_title: string | null;
   superset_dataset_id: number | null;
   submitted_at: string | null;
   published_at: string | null;
@@ -63,8 +71,21 @@ export interface UpdateTemplatePayload {
 }
 
 export interface TemplateApprovePayload {
+  share_mode: 'ALL' | 'SELECTED';
+  department_ids?: string[];
   certificate?: string;
   signature?: string;
+}
+
+export type SupersetLaunchTarget =
+  | 'dataset'
+  | 'dashboard_design'
+  | 'dashboard_review'
+  | 'dashboard_view';
+
+export interface TemplateLaunchUrlResponse {
+  url: string;
+  target: SupersetLaunchTarget;
 }
 
 export interface PkiStepUpChallenge {
@@ -164,7 +185,7 @@ export async function rejectTemplate(
 
 export async function approveTemplate(
   id: string,
-  payload: TemplateApprovePayload = {},
+  payload: TemplateApprovePayload,
 ): Promise<ExportTemplate> {
   return apiFetch<ExportTemplate>(`/templates/${id}/approve`, {
     method: 'POST',
@@ -180,6 +201,30 @@ export async function previewTemplate(
     method: 'POST',
     body: JSON.stringify({ sql: sql ?? null }),
   });
+}
+
+export async function pushTemplateDataset(id: string): Promise<ExportTemplate> {
+  return apiFetch<ExportTemplate>(`/templates/${id}/push-dataset`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function syncTemplateDashboard(id: string): Promise<ExportTemplate> {
+  return apiFetch<ExportTemplate>(`/templates/${id}/sync-dashboard`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function fetchTemplateLaunchUrl(
+  id: string,
+  target: SupersetLaunchTarget,
+): Promise<TemplateLaunchUrlResponse> {
+  const params = new URLSearchParams({ target });
+  return apiFetch<TemplateLaunchUrlResponse>(
+    `/templates/${id}/launch-url?${params.toString()}`,
+  );
 }
 
 export async function fetchTemplateStepUpChallenge(

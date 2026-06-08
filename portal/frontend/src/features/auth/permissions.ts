@@ -100,8 +100,12 @@ export function hasCapability(
     return false;
   }
 
-  if (capability === 'dept.templates' || capability === 'dept.transactions') {
+  if (capability === 'dept.templates') {
     return isDeptSpecialist(ctx) || isDeptLeader(ctx);
+  }
+
+  if (capability === 'dept.transactions') {
+    return isDeptSpecialist(ctx);
   }
 
   if (capability === 'dept.approvals') {

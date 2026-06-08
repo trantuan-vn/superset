@@ -83,6 +83,16 @@ export async function updateUser(
   });
 }
 
+export async function setUserPassword(
+  id: string,
+  password: string,
+): Promise<void> {
+  await apiFetch<{ message: string }>(`/users/${id}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+}
+
 export async function assignDeptRole(
   userId: string,
   payload: AssignDeptRolePayload,

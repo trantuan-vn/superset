@@ -50,8 +50,14 @@ class Settings(BaseSettings):
     frontend_base_url: str = "http://localhost:3000"
     pki_root_ca_path: str | None = None
     superset_internal_url: str = "http://localhost:8088"
+    superset_public_url: str = "http://localhost:8088"
     superset_service_username: str = "portal_provisioner"
     superset_service_api_key: str = ""
+    # Virtual dataset target database (Superset database connection id)
+    superset_template_database_id: int = 1
+    # Launch Bridge — short-lived JWT for auto-login from Portal (§1.3, Phase 8)
+    superset_launch_jwt_secret: str = ""
+    superset_launch_jwt_ttl_seconds: int = 120
     provisioning_max_retries: int = 5
     provisioning_retry_delay_seconds: int = 60
     provisioning_http_timeout: float = 30.0

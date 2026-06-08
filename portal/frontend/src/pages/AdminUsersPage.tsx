@@ -42,6 +42,7 @@ import {
   createUser,
   fetchUsers,
   removeDeptRole,
+  setUserPassword,
   updateUser,
   type DeptRole,
   type PortalUser,
@@ -86,6 +87,11 @@ interface AssignFormValues {
   role: DeptRole;
 }
 
+interface SetPasswordFormValues {
+  password: string;
+  confirm_password: string;
+}
+
 export function AdminUsersPage() {
   const { t } = useTranslation();
   const { user: currentUser, isAuthenticated } = useAuth();
@@ -101,9 +107,11 @@ export function AdminUsersPage() {
   const [editTarget, setEditTarget] = useState<PortalUser | null>(null);
   const [assignTarget, setAssignTarget] = useState<PortalUser | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<PortalUser | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<PortalUser | null>(null);
   const [createForm] = Form.useForm<CreateUserFormValues>();
   const [editForm] = Form.useForm<EditUserFormValues>();
   const [assignForm] = Form.useForm<AssignFormValues>();
+  const [passwordForm] = Form.useForm<SetPasswordFormValues>();
 
   const createSystemRole = Form.useWatch('system_role', createForm);
 
@@ -194,6 +202,26 @@ export function AdminUsersPage() {
     },
   });
 
+  const passwordMutation = useMutation({
+    mutationFn: ({
+      userId,
+      password,
+    }: {
+      userId: string;
+      password: string;
+    }) => setUserPassword(userId, password),
+    onSuccess: () => {
+      message.success(t('adminUsers.passwordUpdated'));
+      setPasswordTarget(null);
+      passwordForm.resetFields();
+    },
+    onError: (err: Error) => {
+      message.error(
+        err instanceof ApiError ? err.message : t('adminUsers.setPasswordError'),
+      );
+    },
+  });
+
   const removeMutation = useMutation({
     mutationFn: ({
       userId,
@@ -237,6 +265,11 @@ export function AdminUsersPage() {
       email: record.email,
       status: record.status,
     });
+  };
+
+  const openSetPassword = (record: PortalUser) => {
+    setPasswordTarget(record);
+    passwordForm.resetFields();
   };
 
   const openAssign = (record: PortalUser) => {
@@ -349,7 +382,7 @@ export function AdminUsersPage() {
       {
         title: t('adminUsers.actions'),
         key: 'actions',
-        width: 220,
+        width: 280,
         render: (_, record) => {
           const editable =
             actorCtx !== null && canModifyUser(actorCtx, record);
@@ -358,6 +391,15 @@ export function AdminUsersPage() {
               {editable ? (
                 <Button type="link" size="small" onClick={() => openEdit(record)}>
                   {t('adminUsers.edit')}
+                </Button>
+              ) : null}
+              {editable ? (
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => openSetPassword(record)}
+                >
+                  {t('adminUsers.setPassword')}
                 </Button>
               ) : null}
               {editable && record.system_role === 'dept_user' ? (
@@ -715,6 +757,65 @@ export function AdminUsersPage() {
             name: deactivateTarget?.display_name,
           })}
         </Typography.Paragraph>
+      </Modal>
+
+      <Modal
+        title={t('adminUsers.setPasswordTitle', {
+          name: passwordTarget?.display_name,
+        })}
+        open={Boolean(passwordTarget)}
+        onCancel={() => {
+          setPasswordTarget(null);
+          passwordForm.resetFields();
+        }}
+        onOk={() => {
+          void passwordForm.validateFields().then((values) => {
+            if (!passwordTarget) {
+              return;
+            }
+            passwordMutation.mutate({
+              userId: passwordTarget.id,
+              password: values.password,
+            });
+          });
+        }}
+        okText={t('adminUsers.setPasswordSave')}
+        okButtonProps={{ loading: passwordMutation.isPending }}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary">
+          {t('adminUsers.setPasswordHint')}
+        </Typography.Paragraph>
+        <Form form={passwordForm} layout="vertical">
+          <Form.Item
+            name="password"
+            label={t('adminUsers.newPassword')}
+            rules={[
+              { required: true, message: t('adminUsers.passwordRequired') },
+              { min: 8, message: t('adminUsers.passwordMin') },
+            ]}
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item
+            name="confirm_password"
+            label={t('adminUsers.confirmPassword')}
+            dependencies={['password']}
+            rules={[
+              { required: true, message: t('adminUsers.confirmPasswordRequired') },
+              ({ getFieldValue }) => ({
+                validator(_, value: string) {
+                  if (!value || getFieldValue('password') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error(t('adminUsers.passwordMismatch')));
+                },
+              }),
+            ]}
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+        </Form>
       </Modal>
     </>
   );

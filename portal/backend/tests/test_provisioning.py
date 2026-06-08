@@ -29,17 +29,20 @@ from app.models.department import DeptRole
 from app.models.provisioning_sync_log import ProvisioningSyncStatus
 from app.models.user import SystemRole, User, UserStatus
 from app.provisioning.blueprint import (
+    RoleBlueprint,
     active_role_name,
+    base_roles_for_blueprint,
     blueprint_for_role_name,
     cntt_cv_role_name,
     dept_cv_role_name,
     dept_ld_role_name,
+    dept_view_permission_allowed,
     inactive_role_name,
+    is_dept_blueprint,
     is_export_permission,
     superset_role_names_for_user,
     superset_username,
 )
-from app.provisioning.blueprint import RoleBlueprint
 from app.provisioning.rison import encode_rison
 from app.provisioning.service import ProvisioningService
 from app.provisioning.superset_client import SupersetClientError, SupersetRole, SupersetUser
@@ -87,6 +90,86 @@ def test_export_permissions_filtered() -> None:
     assert is_export_permission("can_export")
     assert is_export_permission("can_csv")
     assert not is_export_permission("can_read")
+
+
+def test_dept_blueprints_use_empty_base_roles() -> None:
+    assert base_roles_for_blueprint(RoleBlueprint.DEPT_CV) == ()
+    assert base_roles_for_blueprint(RoleBlueprint.DEPT_LD) == ()
+    assert is_dept_blueprint(RoleBlueprint.DEPT_CV)
+    assert not is_dept_blueprint(RoleBlueprint.CNTT_CV)
+
+
+def test_dept_view_permission_allowlist() -> None:
+    assert dept_view_permission_allowed(
+        "can_read", "Dashboard", blueprint=RoleBlueprint.DEPT_CV
+    )
+    assert dept_view_permission_allowed(
+        "can_dashboard", "Superset", blueprint=RoleBlueprint.DEPT_CV
+    )
+    assert not dept_view_permission_allowed(
+        "can_export", "Chart", blueprint=RoleBlueprint.DEPT_CV
+    )
+    assert dept_view_permission_allowed(
+        "can_export", "Chart", blueprint=RoleBlueprint.DEPT_LD
+    )
+    assert dept_view_permission_allowed(
+        "can_export_data", "Superset", blueprint=RoleBlueprint.DEPT_LD
+    )
+    assert not dept_view_permission_allowed(
+        "can_write", "Dashboard", blueprint=RoleBlueprint.DEPT_CV
+    )
+    assert not dept_view_permission_allowed(
+        "can_sqllab", "Superset", blueprint=RoleBlueprint.DEPT_LD
+    )
+
+
+def test_resolve_dept_blueprint_uses_allowlist_only() -> None:
+    db = MagicMock()
+    settings = Settings(superset_service_api_key="sst_test_key")
+    mock_client = MagicMock()
+    mock_client.enabled = True
+
+    service = ProvisioningService(db, client=mock_client, settings=settings)
+    service._load_permission_labels = MagicMock(  # type: ignore[method-assign]
+        return_value={
+            1: "can_read on Dashboard",
+            2: "can_dashboard on Superset",
+            3: "can_write on Dashboard",
+            4: "can_read on SQL Lab",
+            5: "can_sqllab on Superset",
+            6: "can_recent_activity on Log",
+            7: "database_access on [portal_db]",
+        }
+    )
+    service._dataset_access_permission_ids = MagicMock(return_value={7})  # type: ignore[method-assign]
+
+    ids = service._resolve_blueprint_permission_ids(RoleBlueprint.DEPT_CV)
+    assert ids == [1, 2, 6, 7]
+    mock_client.find_role_by_name.assert_not_called()
+
+
+def test_resolve_dept_ld_includes_export_permissions() -> None:
+    db = MagicMock()
+    settings = Settings(superset_service_api_key="sst_test_key")
+    mock_client = MagicMock()
+    mock_client.enabled = True
+
+    service = ProvisioningService(db, client=mock_client, settings=settings)
+    service._load_permission_labels = MagicMock(  # type: ignore[method-assign]
+        return_value={
+            1: "can_read on Dashboard",
+            8: "can_export on Chart",
+            9: "can_sqllab on Superset",
+            10: "can_export_data on Superset",
+            11: "can_export_image on Superset",
+            12: "can_csv on Superset",
+            13: "can_export on Dashboard",
+        }
+    )
+    service._dataset_access_permission_ids = MagicMock(return_value=set())  # type: ignore[method-assign]
+
+    ids = service._resolve_blueprint_permission_ids(RoleBlueprint.DEPT_LD)
+    assert ids == [1, 8, 10, 11, 12]
 
 
 def test_rison_encode_role_filter() -> None:

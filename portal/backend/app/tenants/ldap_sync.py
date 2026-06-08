@@ -69,7 +69,7 @@ def _upsert_ldap_entry(
     uid: str,
     email: str,
     display_name: str,
-    plain_password: str,
+    plain_password: str | None,
     dept_code: str | None,
 ) -> None:
     user_dn = f"uid={uid},{user_base_dn}"
@@ -80,13 +80,17 @@ def _upsert_ldap_entry(
         changes: dict[str, list[tuple[int, list[str]]]] = {
             "mail": [(MODIFY_REPLACE, [email])],
             "cn": [(MODIFY_REPLACE, [display_name])],
-            "userPassword": [(MODIFY_REPLACE, [plain_password])],
         }
+        if plain_password:
+            changes["userPassword"] = [(MODIFY_REPLACE, [plain_password])]
         if dept_code:
             changes["departmentNumber"] = [(MODIFY_REPLACE, [dept_code])]
         if not conn.modify(user_dn, changes):
             raise AuthError(f"LDAP update failed for {uid}: {conn.result}")
         return
+
+    if not plain_password:
+        raise AuthError(f"LDAP create for {uid} requires a password")
 
     attributes: dict[str, list[str]] = {
         "objectClass": ["inetOrgPerson", "organizationalPerson", "person"],
@@ -106,7 +110,59 @@ def _upsert_ldap_entry(
 def _dept_code_for_user(user: User) -> str | None:
     if user.system_role in (SystemRole.CNTT_CHUYENVIEN, SystemRole.CNTT_LANHDAO):
         return "CNTT"
+    if user.dept_roles:
+        assignment = user.dept_roles[0]
+        if assignment.department is not None:
+            return assignment.department.code
     return None
+
+
+def sync_user_to_ldap(
+    db: Session,
+    *,
+    user: User,
+    settings: TenantSettings,
+    plain_password: str | None,
+    clear_local_password: bool = True,
+) -> None:
+    """Create or update one Portal user in LDAP (when LDAP auth is enabled)."""
+    if settings.auth_mode != AuthMode.LDAP or not settings.sso_ldap_enabled:
+        return
+
+    sso_config = settings.sso_config or {}
+    uid = portal_uid(user.username)
+    dept_code = _dept_code_for_user(user)
+
+    try:
+        conn = _ldap_connection(sso_config)
+        user_base_dn = str(sso_config["user_base_dn"])
+        conn.search(user_base_dn, f"(uid={uid})", attributes=["uid"])
+        exists = bool(conn.entries)
+        if not exists and not plain_password:
+            return
+        _upsert_ldap_entry(
+            conn,
+            user_base_dn=user_base_dn,
+            uid=uid,
+            email=user.email,
+            display_name=user.display_name,
+            plain_password=plain_password,
+            dept_code=dept_code,
+        )
+        profile = ExternalProfile(
+            external_id=uid,
+            email=user.email,
+            display_name=user.display_name,
+            dept_code=dept_code,
+            raw_attributes={"synced_from": "portal"},
+            provider=AuthProvider.LDAP,
+        )
+        _upsert_identity(db, user, AuthProvider.LDAP, profile)
+        if clear_local_password:
+            user.password_hash = None
+        db.flush()
+    except LDAPException as exc:
+        raise AuthError(f"LDAP sync error: {exc}", status_code=502) from exc
 
 
 def sync_portal_users_to_ldap(

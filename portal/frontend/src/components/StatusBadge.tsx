@@ -20,23 +20,42 @@ import { Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
 
 import type { TemplateStatus } from '@/api/templates';
+import type { TransactionStatus } from '@/api/transactions';
 
-const STATUS_COLORS: Record<TemplateStatus, string> = {
+const TEMPLATE_COLORS: Record<TemplateStatus, string> = {
   draft: 'default',
   review: 'processing',
   published: 'success',
   archived: 'warning',
 };
 
+const TRANSACTION_COLORS: Record<TransactionStatus, string> = {
+  draft: 'default',
+  submitted: 'processing',
+  approved: 'success',
+  rejected: 'error',
+  downloaded: 'cyan',
+};
+
 interface StatusBadgeProps {
-  status: TemplateStatus;
+  status: TemplateStatus | TransactionStatus;
+  variant?: 'template' | 'transaction';
 }
 
-export function StatusBadge({ status }: StatusBadgeProps) {
+export function StatusBadge({ status, variant = 'template' }: StatusBadgeProps) {
   const { t } = useTranslation();
+  if (variant === 'transaction') {
+    const txnStatus = status as TransactionStatus;
+    return (
+      <Tag color={TRANSACTION_COLORS[txnStatus]}>
+        {t(`statusBadge.transaction.${txnStatus}`)}
+      </Tag>
+    );
+  }
+  const templateStatus = status as TemplateStatus;
   return (
-    <Tag color={STATUS_COLORS[status]}>
-      {t(`statusBadge.template.${status}`)}
+    <Tag color={TEMPLATE_COLORS[templateStatus]}>
+      {t(`statusBadge.template.${templateStatus}`)}
     </Tag>
   );
 }

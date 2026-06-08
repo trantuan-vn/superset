@@ -236,6 +236,10 @@ class UpdateUserRequest(BaseModel):
     status: str | None = None
 
 
+class SetUserPasswordRequest(BaseModel):
+    password: str = Field(..., min_length=8, max_length=256)
+
+
 class AssignDeptRoleRequest(BaseModel):
     department_id: str
     role: str = Field(..., description="chuyenvien or lanhdao")
@@ -257,6 +261,12 @@ class McpTokenResponse(BaseModel):
     superset_username: str
 
 
+class ShareDepartmentResponse(BaseModel):
+    id: str
+    code: str
+    name: str
+
+
 class TemplateResponse(BaseModel):
     id: str
     tenant_id: str
@@ -266,11 +276,13 @@ class TemplateResponse(BaseModel):
     status: str
     share_mode: str | None = None
     share_scope_version: int = 0
+    shared_departments: list[ShareDepartmentResponse] = Field(default_factory=list)
     reject_comment: str | None = None
     created_by: str
     created_by_name: str | None = None
     published_by: str | None = None
     superset_dashboard_id: int | None = None
+    superset_dashboard_title: str | None = None
     superset_dataset_id: int | None = None
     submitted_at: str | None = None
     published_at: str | None = None
@@ -295,8 +307,15 @@ class TemplateRejectRequest(BaseModel):
 
 
 class TemplateApproveRequest(BaseModel):
+    share_mode: str = Field(..., description="ALL or SELECTED")
+    department_ids: list[str] = Field(default_factory=list)
     certificate: str | None = Field(default=None, min_length=64)
     signature: str | None = Field(default=None, min_length=1)
+
+
+class TemplateLaunchUrlResponse(BaseModel):
+    url: str
+    target: str
 
 
 class TemplatePreviewRequest(BaseModel):
@@ -315,6 +334,35 @@ class PkiStepUpChallengeResponse(BaseModel):
     nonce: str
     expires_in_seconds: int
     action: str
+
+
+class TransactionResponse(BaseModel):
+    id: str
+    tenant_id: str
+    template_id: str
+    template_name: str | None = None
+    department_id: str
+    params_json: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    reject_comment: str | None = None
+    request_reason: str | None = None
+    created_by: str
+    created_by_name: str | None = None
+    submitted_at: str | None = None
+    approved_by: str | None = None
+    approved_at: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class CreateTransactionRequest(BaseModel):
+    template_id: str
+    reason: str = Field(..., min_length=1, max_length=4000)
+    params_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class RejectTransactionRequest(BaseModel):
+    comment: str = Field(..., min_length=1, max_length=4000)
 
 
 def branding_from_json(raw: dict[str, Any] | None) -> TenantBrandingResponse | None:

@@ -115,7 +115,7 @@ def _handle_user_provision_requested(event: UserProvisionRequested) -> None:
     db = SessionLocal()
     try:
         service = ProvisioningService(db)
-        service.sync_user_by_id(event.user_id)
+        service.sync_user_by_id(event.user_id, password=event.password)
     except Exception:
         logger.exception("Failed to sync user %s to Superset", event.user_id)
     finally:

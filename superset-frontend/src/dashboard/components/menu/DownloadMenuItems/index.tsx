@@ -17,6 +17,7 @@
  * under the License.
  */
 import { SyntheticEvent } from 'react';
+import { useSelector } from 'react-redux';
 import { logging } from '@apache-superset/core/utils';
 import { t } from '@apache-superset/core/translation';
 import {
@@ -38,6 +39,8 @@ import {
 import { useToasts } from 'src/components/MessageToasts/withToasts';
 
 import { MenuItemTooltip } from 'src/components/Chart/DisabledMenuItemTooltip';
+import { RootState } from 'src/dashboard/types';
+import { findPermission } from 'src/utils/findPermission';
 import { DownloadScreenshotFormat } from './types';
 
 export interface UseDownloadMenuItemsProps {
@@ -68,6 +71,8 @@ export const useDownloadMenuItems = (
   } = props;
 
   const { addDangerToast, addSuccessToast } = useToasts();
+  const roles = useSelector((state: RootState) => state.user?.roles);
+  const canWriteDashboard = findPermission('can_write', 'Dashboard', roles);
   const SCREENSHOT_NODE_SELECTOR = '.dashboard';
 
   const isWebDriverScreenshotEnabled =
@@ -197,27 +202,30 @@ export const useDownloadMenuItems = (
         },
       ];
 
-  const exportMenuItems: MenuItem[] = [
-    {
-      key: 'export-yaml',
-      label: t('Export YAML'),
-      onClick: onExportZip,
-    },
-    ...(userCanExport
-      ? [
-          {
-            key: 'export-as-example',
-            label: t('Export as Example'),
-            onClick: onExportAsExample,
-          },
-        ]
-      : []),
-  ];
+  const exportMenuItems: MenuItem[] = canWriteDashboard
+    ? [
+        {
+          key: 'export-yaml',
+          label: t('Export YAML'),
+          onClick: onExportZip,
+        },
+        ...(userCanExport
+          ? [
+              {
+                key: 'export-as-example',
+                label: t('Export as Example'),
+                onClick: onExportAsExample,
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   const children: MenuItem[] = [
     ...screenshotMenuItems,
-    { type: 'divider', key: 'export-divider' },
-    ...exportMenuItems,
+    ...(exportMenuItems.length > 0
+      ? [{ type: 'divider' as const, key: 'export-divider' }, ...exportMenuItems]
+      : []),
   ];
 
   return {

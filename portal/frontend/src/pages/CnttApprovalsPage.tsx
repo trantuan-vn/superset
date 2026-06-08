@@ -35,18 +35,23 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { fetchTenantSettings } from '@/api/tenants';
+import { fetchDepartments } from '@/api/departments';
 import {
   ApiError,
   approveTemplate,
+  fetchTemplateLaunchUrl,
   fetchTemplateStepUpChallenge,
   fetchTemplates,
-  previewTemplate,
   rejectTemplate,
   type ExportTemplate,
-  type TemplatePreviewResult,
 } from '@/api/templates';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { PageHeader } from '@/components/PageHeader';
+import {
+  openSupersetLaunch,
+  ShareScopePicker,
+  type ShareMode,
+} from '@/components/ShareScopePicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { readFileAsText, signChallengeWithPrivateKey } from '@/features/auth/pkiSign';
 
@@ -59,9 +64,11 @@ export function CnttApprovalsPage() {
   const queryClient = useQueryClient();
   const { tenant } = useAuth();
   const [selected, setSelected] = useState<ExportTemplate | null>(null);
-  const [preview, setPreview] = useState<TemplatePreviewResult | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
   const [pkiOpen, setPkiOpen] = useState(false);
+  const [shareMode, setShareMode] = useState<ShareMode>('ALL');
+  const [shareDeptIds, setShareDeptIds] = useState<string[]>([]);
   const [rejectForm] = Form.useForm<{ comment: string }>();
   const [pkiForm] = Form.useForm<{
     privateKeyFile: { originFileObj?: File }[];
@@ -77,6 +84,11 @@ export function CnttApprovalsPage() {
     queryKey: ['tenant', 'settings', tenant?.id],
     queryFn: () => fetchTenantSettings(tenant?.id as string),
     enabled: Boolean(tenant?.id),
+  });
+
+  const departmentsQuery = useQuery({
+    queryKey: ['departments', 'active'],
+    queryFn: () => fetchDepartments({ status: 'active' }),
   });
 
   const pkiRequired =
@@ -102,8 +114,16 @@ export function CnttApprovalsPage() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: (payload: { id: string; certificate?: string; signature?: string }) =>
+    mutationFn: (payload: {
+      id: string;
+      share_mode: ShareMode;
+      department_ids?: string[];
+      certificate?: string;
+      signature?: string;
+    }) =>
       approveTemplate(payload.id, {
+        share_mode: payload.share_mode,
+        department_ids: payload.department_ids,
         certificate: payload.certificate,
         signature: payload.signature,
       }),
@@ -112,6 +132,7 @@ export function CnttApprovalsPage() {
       queryClient.invalidateQueries({ queryKey: ['templates'] });
       message.success(t('cnttApprovals.approved'));
       setPkiOpen(false);
+      setApproveOpen(false);
       setSelected(null);
       pkiForm.resetFields();
     },
@@ -122,69 +143,56 @@ export function CnttApprovalsPage() {
     },
   });
 
-  const previewMutation = useMutation({
-    mutationFn: (template: ExportTemplate) => previewTemplate(template.id),
-    onSuccess: (result) => setPreview(result),
+  const launchReviewMutation = useMutation({
+    mutationFn: (templateId: string) =>
+      fetchTemplateLaunchUrl(templateId, 'dashboard_review'),
+    onSuccess: ({ url }) => openSupersetLaunch(url),
     onError: (err) => {
       const text =
-        err instanceof ApiError ? err.message : t('cnttApprovals.previewFailed');
+        err instanceof ApiError ? err.message : t('cnttApprovals.launchFailed');
       message.error(text);
     },
   });
 
   const openDrawer = (template: ExportTemplate) => {
     setSelected(template);
-    setPreview(null);
-    previewMutation.mutate(template);
   };
 
   const handleApproveClick = () => {
     if (!selected) {
       return;
     }
-    if (pkiRequired) {
-      setPkiOpen(true);
-      return;
-    }
-    approveMutation.mutate({ id: selected.id });
+    setApproveOpen(true);
   };
 
-  const handlePkiApprove = async () => {
+  const runApprove = async (certificate?: string, signature?: string) => {
     if (!selected) {
       return;
     }
-    const keyList = pkiForm.getFieldValue('privateKeyFile') as
-      | { originFileObj?: File }[]
-      | undefined;
-    const certList = pkiForm.getFieldValue('certificateFile') as
-      | { originFileObj?: File }[]
-      | undefined;
-    const keyFile = keyList?.[0]?.originFileObj;
-    const certFile = certList?.[0]?.originFileObj;
-    if (!keyFile || !certFile) {
-      message.warning(t('cnttApprovals.pkiKeyRequired'));
+    if (shareMode === 'SELECTED' && shareDeptIds.length === 0) {
+      message.warning(t('cnttApprovals.shareRequired'));
       return;
     }
-    try {
-      const [certificate, privateKeyPem] = await Promise.all([
-        readFileAsText(certFile),
-        readFileAsText(keyFile),
-      ]);
-      const challenge = await fetchTemplateStepUpChallenge();
-      const signature = await signChallengeWithPrivateKey(
-        challenge.nonce,
-        privateKeyPem,
-      );
-      await approveMutation.mutateAsync({
-        id: selected.id,
-        certificate,
-        signature,
-      });
-    } catch (err) {
-      const text =
-        err instanceof Error ? err.message : t('cnttApprovals.approveFailed');
-      message.error(text);
+    if (pkiRequired && (!certificate || !signature)) {
+      setPkiOpen(true);
+      return;
     }
+    await approveMutation.mutateAsync({
+      id: selected.id,
+      share_mode: shareMode,
+      department_ids: shareMode === 'SELECTED' ? shareDeptIds : undefined,
+      certificate,
+      signature,
+    });
+  };
+
+  const handleConfirmApprove = async () => {
+    if (pkiRequired) {
+      setApproveOpen(false);
+      setPkiOpen(true);
+      return;
+    }
+    await runApprove();
   };
 
   const columns: TableColumnsType<ExportTemplate> = [
@@ -221,14 +229,6 @@ export function CnttApprovalsPage() {
       ),
     },
   ];
-
-  const previewColumns =
-    preview?.columns.map((column) => ({
-      title: column,
-      dataIndex: column,
-      key: column,
-      ellipsis: true,
-    })) ?? [];
 
   return (
     <div>
@@ -282,6 +282,38 @@ export function CnttApprovalsPage() {
               </Typography.Text>
             </Space>
             <div>
+              <Typography.Text strong>{t('cnttApprovals.dashboardLabel')}</Typography.Text>
+              <Space style={{ marginTop: 8 }}>
+                <Typography.Text>
+                  {selected.superset_dashboard_title ?? selected.name}
+                  {selected.superset_dashboard_id
+                    ? ` (#${selected.superset_dashboard_id})`
+                    : ''}
+                </Typography.Text>
+                {selected.superset_dashboard_id ? (
+                  <Button
+                    onClick={() => launchReviewMutation.mutate(selected.id)}
+                    loading={launchReviewMutation.isPending}
+                  >
+                    {t('cnttApprovals.openSuperset')}
+                  </Button>
+                ) : null}
+              </Space>
+            </div>
+            <div>
+              <Typography.Text strong>{t('cnttApprovals.shareScopeLabel')}</Typography.Text>
+              <Typography.Paragraph type="secondary" style={{ marginTop: 4 }}>
+                {t('cnttApprovals.shareScopeHint')}
+              </Typography.Paragraph>
+              <ShareScopePicker
+                mode={shareMode}
+                departmentIds={shareDeptIds}
+                departments={departmentsQuery.data ?? []}
+                onModeChange={setShareMode}
+                onDepartmentIdsChange={setShareDeptIds}
+              />
+            </div>
+            <div>
               <Typography.Text strong>{t('cnttApprovals.sqlLabel')}</Typography.Text>
               <Input.TextArea
                 value={selected.sql_snapshot}
@@ -289,24 +321,6 @@ export function CnttApprovalsPage() {
                 rows={10}
                 style={{ marginTop: 8, fontFamily: 'monospace' }}
               />
-            </div>
-            <div>
-              <Typography.Text strong>{t('cnttApprovals.previewLabel')}</Typography.Text>
-              {previewMutation.isPending ? (
-                <LoadingSkeleton variant="form" rows={3} />
-              ) : preview ? (
-                <Table
-                  size="small"
-                  style={{ marginTop: 8 }}
-                  columns={previewColumns}
-                  dataSource={preview.rows.map((row, index) => ({
-                    ...row,
-                    key: String(index),
-                  }))}
-                  pagination={false}
-                  scroll={{ x: true }}
-                />
-              ) : null}
             </div>
             {pkiRequired ? (
               <Alert
@@ -319,6 +333,29 @@ export function CnttApprovalsPage() {
           </Space>
         ) : null}
       </Drawer>
+
+      <Modal
+        title={t('cnttApprovals.approveTitle')}
+        open={approveOpen}
+        onCancel={() => setApproveOpen(false)}
+        onOk={handleConfirmApprove}
+        confirmLoading={approveMutation.isPending}
+        okText={t('cnttApprovals.approveConfirm')}
+      >
+        <Typography.Paragraph type="secondary">
+          {t('cnttApprovals.approveDesc')}
+        </Typography.Paragraph>
+        {shareMode === 'ALL' ? (
+          <Typography.Text>{t('shareScope.allDepartments')}</Typography.Text>
+        ) : (
+          <Typography.Text>
+            {departmentsQuery.data
+              ?.filter((dept) => shareDeptIds.includes(dept.id))
+              .map((dept) => `${dept.code} — ${dept.name}`)
+              .join(', ') || t('cnttApprovals.shareRequired')}
+          </Typography.Text>
+        )}
+      </Modal>
 
       <Modal
         title={t('cnttApprovals.rejectTitle')}
@@ -355,7 +392,39 @@ export function CnttApprovalsPage() {
         title={t('cnttApprovals.pkiTitle')}
         open={pkiOpen}
         onCancel={() => setPkiOpen(false)}
-        onOk={handlePkiApprove}
+        onOk={async () => {
+          if (!selected) {
+            return;
+          }
+          const keyList = pkiForm.getFieldValue('privateKeyFile') as
+            | { originFileObj?: File }[]
+            | undefined;
+          const certList = pkiForm.getFieldValue('certificateFile') as
+            | { originFileObj?: File }[]
+            | undefined;
+          const keyFile = keyList?.[0]?.originFileObj;
+          const certFile = certList?.[0]?.originFileObj;
+          if (!keyFile || !certFile) {
+            message.warning(t('cnttApprovals.pkiKeyRequired'));
+            return;
+          }
+          try {
+            const [certificate, privateKeyPem] = await Promise.all([
+              readFileAsText(certFile),
+              readFileAsText(keyFile),
+            ]);
+            const challenge = await fetchTemplateStepUpChallenge();
+            const signature = await signChallengeWithPrivateKey(
+              challenge.nonce,
+              privateKeyPem,
+            );
+            await runApprove(certificate, signature);
+          } catch (err) {
+            const text =
+              err instanceof Error ? err.message : t('cnttApprovals.approveFailed');
+            message.error(text);
+          }
+        }}
         confirmLoading={approveMutation.isPending}
         okText={t('cnttApprovals.pkiConfirm')}
       >

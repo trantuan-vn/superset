@@ -115,7 +115,7 @@ FEATURE_FLAGS = {
     "SEMANTIC_LAYERS": True,
     # Portal Phase 5 — role provisioning
     "DASHBOARD_RBAC": True,
-    "GRANULAR_EXPORT_PERMISSIONS": True,
+    "GRANULAR_EXPORT_CONTROLS": True,
     "FAB_API_KEY_ENABLED": True,
     # Portal Phase 6 — multi-tenant / department RLS
     "RLS_IN_SQLLAB": True,
@@ -131,6 +131,20 @@ JINJA_CONTEXT_ADDONS = {
     "current_user_tenant": current_user_tenant,
     "current_user_dept": current_user_dept,
 }
+
+# Portal Launch Bridge — auto-login when opening Superset from Portal (Phase 8)
+PORTAL_LAUNCH_ENABLED = os.getenv("PORTAL_LAUNCH_ENABLED", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+PORTAL_LAUNCH_JWT_SECRET = os.getenv(
+    "PORTAL_LAUNCH_JWT_SECRET",
+    os.getenv("MCP_JWT_SECRET", "portal-dev-mcp-jwt-secret-change-in-prod"),
+)
+PORTAL_LAUNCH_JWT_ISSUER = os.getenv("PORTAL_LAUNCH_JWT_ISSUER", "portal")
+PORTAL_LAUNCH_JWT_AUDIENCE = "superset-launch"
+PORTAL_LAUNCH_JWT_ALGORITHM = "HS256"
 
 # Portal provisioning service account (API key auth)
 FAB_API_KEY_ENABLED = True

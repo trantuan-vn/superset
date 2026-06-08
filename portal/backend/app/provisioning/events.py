@@ -48,6 +48,7 @@ class UserProvisionRequested:
     tenant_slug: str
     dept_code: str | None = None
     dept_role: DeptRole | None = None
+    password: str | None = None
 
 
 _tenant_created_handlers: list[Callable[[TenantCreated], None]] = []
@@ -98,6 +99,7 @@ def request_user_provision(
     *,
     dept_code: str | None = None,
     dept_role: DeptRole | None = None,
+    password: str | None = None,
 ) -> None:
     """Queue a user sync after create/update/dept-role change."""
     emit_user_provision_requested(
@@ -106,5 +108,6 @@ def request_user_provision(
             tenant_slug=tenant_slug,
             dept_code=dept_code,
             dept_role=dept_role,
+            password=password,
         )
     )

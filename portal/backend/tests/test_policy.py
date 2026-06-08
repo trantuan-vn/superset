@@ -85,6 +85,8 @@ def test_dept_user_requires_assignment_and_role() -> None:
     assert has_capability(specialist, Capability.DEPT_TEMPLATES)
     assert has_capability(specialist, Capability.DEPT_TRANSACTIONS)
     assert not has_capability(specialist, Capability.DEPT_APPROVALS)
+    assert has_capability(dept_leader, Capability.DEPT_TEMPLATES)
+    assert not has_capability(dept_leader, Capability.DEPT_TRANSACTIONS)
     assert has_capability(dept_leader, Capability.DEPT_APPROVALS)
 
 

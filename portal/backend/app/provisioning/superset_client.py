@@ -18,8 +18,6 @@
 
 from __future__ import annotations
 
-import secrets
-import string
 from dataclasses import dataclass
 from typing import Any
 
@@ -279,9 +277,9 @@ class SupersetClient:
         first_name: str,
         last_name: str,
         role_ids: list[int],
+        password: str,
         active: bool = True,
     ) -> SupersetUser:
-        password = _random_password()
         payload = {
             "username": username,
             "email": email,
@@ -299,6 +297,14 @@ class SupersetClient:
             email=email,
             active=active,
             role_ids=tuple(role_ids),
+        )
+
+    def update_user_password(self, user_id: int, password: str) -> None:
+        """Set Superset login password to match Portal."""
+        self._request(
+            "PUT",
+            f"/api/v1/security/users/{user_id}",
+            json_payload={"password": password},
         )
 
     def update_user(
@@ -428,10 +434,195 @@ class SupersetClient:
             params={"q": query},
         )
 
+    def find_dataset_id_by_table_name(self, table_name: str) -> int | None:
+        """Resolve a Superset dataset id by table_name."""
+        query = encode_rison(
+            {
+                "filters": [{"col": "table_name", "opr": "eq", "value": table_name}],
+                "page": 0,
+                "page_size": 1,
+            }
+        )
+        data = self._request("GET", "/api/v1/dataset/", params={"q": query})
+        results = data.get("result") or []
+        for item in results:
+            if str(item.get("table_name") or "") == table_name:
+                return int(item["id"])
+        return None
 
-def _random_password(length: int = 32) -> str:
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-    return "".join(secrets.choice(alphabet) for _ in range(length))
+    def update_virtual_dataset_sql(self, dataset_id: int, *, sql: str) -> None:
+        """Update SQL on an existing virtual dataset."""
+        self._request_with_csrf(
+            "PUT",
+            f"/api/v1/dataset/{dataset_id}",
+            json_payload={"sql": sql},
+        )
+
+    def create_virtual_dataset(
+        self,
+        *,
+        database_id: int,
+        table_name: str,
+        sql: str,
+        schema: str | None = None,
+    ) -> int:
+        """Create a virtual dataset from SQL and return its Superset id."""
+        payload: dict[str, Any] = {
+            "database": database_id,
+            "table_name": table_name,
+            "sql": sql,
+        }
+        if schema:
+            payload["schema"] = schema
+        data = self._request_with_csrf("POST", "/api/v1/dataset/", json_payload=payload)
+        dataset_id = data.get("id")
+        if dataset_id is None and isinstance(data.get("data"), dict):
+            dataset_id = data["data"].get("id")
+        if dataset_id is None and isinstance(data.get("result"), dict):
+            dataset_id = data["result"].get("id")
+        if dataset_id is None:
+            raise SupersetClientError(f"Unexpected dataset create response: {data}")
+        return int(dataset_id)
+
+    def find_role_ids_by_names(self, role_names: list[str]) -> list[int]:
+        """Resolve Superset role ids by exact name match."""
+        if not role_names:
+            return []
+        found: list[int] = []
+        remaining = set(role_names)
+        page = 0
+        while remaining:
+            query = encode_rison({"page": page, "page_size": _PAGE_SIZE})
+            data = self._request("GET", "/api/v1/security/roles/search/", params={"q": query})
+            results = data.get("result") or []
+            if not results:
+                break
+            for role in results:
+                name = str(role.get("name") or "")
+                if name in remaining:
+                    found.append(int(role["id"]))
+                    remaining.discard(name)
+            total = int(data.get("count") or 0)
+            page += 1
+            if not results or page * len(results) >= total:
+                break
+        return found
+
+    def find_user_by_email(self, email: str) -> SupersetUser | None:
+        normalized = email.strip().lower()
+        if not normalized:
+            return None
+        query = encode_rison(
+            {
+                "filters": [{"col": "email", "opr": "eq", "value": normalized}],
+                "page": 0,
+                "page_size": 1,
+            }
+        )
+        data = self._request("GET", "/api/v1/security/users/", params={"q": query})
+        results = data.get("result") or []
+        for user in results:
+            if str(user.get("email") or "").lower() != normalized:
+                continue
+            role_ids = tuple(int(r["id"]) for r in user.get("roles") or [])
+            return SupersetUser(
+                id=int(user["id"]),
+                username=str(user["username"]),
+                email=str(user.get("email") or ""),
+                active=bool(user.get("active", True)),
+                role_ids=role_ids,
+            )
+        return None
+
+    def resolve_portal_user(
+        self,
+        tenant_slug: str,
+        *,
+        portal_username: str,
+        email: str | None = None,
+    ) -> SupersetUser | None:
+        """Find the Superset account for a Portal user (handles .local drift)."""
+        from app.provisioning.blueprint import superset_username_candidates
+
+        for ss_username in superset_username_candidates(
+            tenant_slug,
+            portal_username=portal_username,
+            email=email,
+        ):
+            found = self.find_user_by_username(ss_username)
+            if found is not None:
+                return found
+        if email:
+            return self.find_user_by_email(email)
+        return None
+
+    def get_superset_user_id(self, username: str) -> int | None:
+        user = self.find_user_by_username(username)
+        return user.id if user else None
+
+    def list_dashboards_for_owner(
+        self,
+        owner_id: int,
+        *,
+        page: int = 0,
+        page_size: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return dashboards owned by the given Superset user id."""
+        query = encode_rison(
+            {
+                "filters": [
+                    {"col": "owners", "opr": "rel_m_m", "value": owner_id},
+                ],
+                "order_column": "changed_on_delta_humanized",
+                "order_direction": "desc",
+                "page": page,
+                "page_size": page_size,
+            }
+        )
+        data = self._request("GET", "/api/v1/dashboard/", params={"q": query})
+        return list(data.get("result") or [])
+
+    def find_dashboards_by_dataset_id(self, dataset_id: int) -> list[dict[str, Any]]:
+        """Return dashboards that include charts backed by the given dataset."""
+        query = encode_rison(
+            {
+                "filters": [
+                    {"col": "datasource_id", "opr": "eq", "value": dataset_id},
+                    {"col": "datasource_type", "opr": "eq", "value": "table"},
+                ],
+                "page": 0,
+                "page_size": 100,
+            }
+        )
+        data = self._request("GET", "/api/v1/chart/", params={"q": query})
+        dashboards_by_id: dict[int, dict[str, Any]] = {}
+        for chart in data.get("result") or []:
+            for dashboard in chart.get("dashboards") or []:
+                dash_id = int(dashboard["id"])
+                if dash_id not in dashboards_by_id:
+                    dashboards_by_id[dash_id] = {
+                        "id": dash_id,
+                        "dashboard_title": dashboard.get("dashboard_title"),
+                    }
+        return list(dashboards_by_id.values())
+
+    def update_dashboard_rbac(
+        self,
+        dashboard_id: int,
+        *,
+        published: bool,
+        role_ids: list[int],
+    ) -> None:
+        """Set dashboard published flag and DASHBOARD_RBAC roles."""
+        self._request_with_csrf(
+            "PUT",
+            f"/api/v1/dashboard/{dashboard_id}",
+            json_payload={
+                "published": published,
+                "roles": role_ids,
+            },
+        )
+
 
 
 def split_display_name(display_name: str) -> tuple[str, str]:

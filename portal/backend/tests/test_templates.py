@@ -185,7 +185,7 @@ def test_approve_published() -> None:
                 return_value=db_template,
             ),
         ):
-            response = client.post(f"/templates/{db_template.id}/approve", json={})
+            response = client.post(f"/templates/{db_template.id}/approve", json={"share_mode": "ALL"})
         assert response.status_code == 200
         assert response.json()["status"] == "published"
     finally:

@@ -55,6 +55,7 @@ class ExportTemplate(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     sql_snapshot: Mapped[str] = mapped_column(Text, nullable=False, default="")
     superset_dashboard_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    superset_dashboard_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     superset_dataset_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[TemplateStatus] = mapped_column(
         Enum(

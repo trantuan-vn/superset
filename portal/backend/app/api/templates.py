@@ -28,6 +28,7 @@ from app.api.schemas import (
     CreateTemplateRequest,
     PkiStepUpChallengeResponse,
     TemplateApproveRequest,
+    TemplateLaunchUrlResponse,
     TemplatePreviewRequest,
     TemplatePreviewResponse,
     TemplateRejectRequest,
@@ -39,19 +40,24 @@ from app.auth.pki_service import create_pki_stepup_challenge, verify_pki_step_up
 from app.auth.service import AuthError
 from app.auth.session import SessionData
 from app.db import get_db
-from app.models.export_template import TemplateStatus
-from app.models.tenant import TenantSettings
+from app.models.export_template import TemplateShareMode, TemplateStatus
+from app.models.tenant import Tenant, TenantSettings
 from app.models.user import User
+from app.superset.launch import SupersetLaunchTarget
+from app.templates.access import shared_department_rows
 from app.templates.service import (
     TemplateError,
     TemplateListFilters,
     approve_template,
     create_template,
     get_template,
+    get_template_launch_url,
     list_templates,
     preview_template_sql,
+    push_template_dataset,
     reject_template,
     submit_template,
+    sync_template_dashboard,
     template_to_dict,
     update_template,
 )
@@ -77,6 +83,13 @@ def _load_settings(db: Session, tenant_id: uuid.UUID) -> TenantSettings:
     return settings
 
 
+def _load_tenant(db: Session, tenant_id: uuid.UUID) -> Tenant:
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return tenant
+
+
 def _creator_names(db: Session, templates: list) -> dict[uuid.UUID, str]:
     creator_ids = {template.created_by for template in templates}
     if not creator_ids:
@@ -96,6 +109,7 @@ def _to_response(
         **template_to_dict(
             template,
             creator_name=names.get(template.created_by),
+            shared_departments=shared_department_rows(db, template),
         )
     )
 
@@ -209,8 +223,29 @@ def submit_template_api(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user_with_dept_roles)],
 ) -> TemplateResponse:
+    tenant = _load_tenant(db, user.tenant_id)
     try:
         template = submit_template(
+            db,
+            user,
+            template_id,
+            tenant=tenant,
+            ip_address=_client_ip(request),
+        )
+    except TemplateError as exc:
+        raise _handle_template_error(exc) from exc
+    return _to_response(db, template, creator_names={user.id: user.display_name})
+
+
+@router.post("/{template_id}/push-dataset", response_model=TemplateResponse)
+def push_template_dataset_api(
+    template_id: uuid.UUID,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user_with_dept_roles)],
+) -> TemplateResponse:
+    try:
+        template = push_template_dataset(
             db,
             user,
             template_id,
@@ -219,6 +254,52 @@ def submit_template_api(
     except TemplateError as exc:
         raise _handle_template_error(exc) from exc
     return _to_response(db, template, creator_names={user.id: user.display_name})
+
+
+@router.post("/{template_id}/sync-dashboard", response_model=TemplateResponse)
+def sync_template_dashboard_api(
+    template_id: uuid.UUID,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user_with_dept_roles)],
+) -> TemplateResponse:
+    tenant = _load_tenant(db, user.tenant_id)
+    try:
+        template = sync_template_dashboard(
+            db,
+            user,
+            template_id,
+            tenant=tenant,
+            ip_address=_client_ip(request),
+        )
+    except TemplateError as exc:
+        raise _handle_template_error(exc) from exc
+    return _to_response(db, template, creator_names={user.id: user.display_name})
+
+
+@router.get("/{template_id}/launch-url", response_model=TemplateLaunchUrlResponse)
+def template_launch_url_api(
+    template_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(get_current_user_with_dept_roles)],
+    target: Annotated[str, Query(description="dataset|dashboard_design|dashboard_review|dashboard_view")] = "dataset",
+) -> TemplateLaunchUrlResponse:
+    tenant = _load_tenant(db, user.tenant_id)
+    try:
+        launch_target = SupersetLaunchTarget(target)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid launch target") from exc
+    try:
+        url = get_template_launch_url(
+            db,
+            user,
+            template_id,
+            tenant=tenant,
+            target=launch_target,
+        )
+    except TemplateError as exc:
+        raise _handle_template_error(exc) from exc
+    return TemplateLaunchUrlResponse(url=url, target=target)
 
 
 @router.post("/{template_id}/reject", response_model=TemplateResponse)
@@ -253,9 +334,22 @@ def approve_template_api(
     session: Annotated[SessionData, Depends(get_session_data)],
 ) -> TemplateResponse:
     settings = _load_settings(db, user.tenant_id)
+    tenant = _load_tenant(db, user.tenant_id)
     pki_config = settings.pki_config or {}
     signature_hash: str | None = None
     cert_serial: str | None = None
+
+    try:
+        share_mode = TemplateShareMode(body.share_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid share_mode") from exc
+
+    department_ids: list[uuid.UUID] = []
+    for raw_id in body.department_ids:
+        try:
+            department_ids.append(uuid.UUID(raw_id))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid department id") from exc
 
     if settings.digital_signature_enabled and pki_config.get("require_cert_at_approval"):
         if not body.certificate or not body.signature:
@@ -284,7 +378,10 @@ def approve_template_api(
             db,
             user,
             template_id,
+            tenant=tenant,
             settings=settings,
+            share_mode=share_mode,
+            department_ids=department_ids or None,
             ip_address=_client_ip(request),
             signature_payload_hash=signature_hash,
             signer_cert_serial=cert_serial,

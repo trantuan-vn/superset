@@ -27,7 +27,6 @@ import {
   Modal,
   Space,
   Steps,
-  Table,
   Typography,
   message,
 } from 'antd';
@@ -37,14 +36,16 @@ import { ApiError } from '@/api/templates';
 import {
   createTemplate,
   fetchTemplate,
-  previewTemplate,
+  fetchTemplateLaunchUrl,
+  pushTemplateDataset,
   submitTemplate,
+  syncTemplateDashboard,
   updateTemplate,
   type ExportTemplate,
-  type TemplatePreviewResult,
 } from '@/api/templates';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { PageHeader } from '@/components/PageHeader';
+import { openSupersetLaunch } from '@/components/ShareScopePicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { AiAssistantPanel } from '@/features/templates/AiAssistantPanel';
 import styles from '@/features/templates/TemplateStudioPage.module.css';
@@ -84,7 +85,6 @@ export function TemplateStudioPage() {
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [pendingSql, setPendingSql] = useState<string | null>(null);
   const [showDiff, setShowDiff] = useState(false);
-  const [preview, setPreview] = useState<TemplatePreviewResult | null>(null);
 
   const templateQuery = useQuery({
     queryKey: ['templates', id],
@@ -152,14 +152,58 @@ export function TemplateStudioPage() {
     },
   });
 
-  const previewMutation = useMutation({
-    mutationFn: () => previewTemplate(id as string, sql.trim()),
-    onSuccess: (result) => {
-      setPreview(result);
+  const launchDesignMutation = useMutation({
+    mutationFn: () => fetchTemplateLaunchUrl(id as string, 'dataset'),
+    onSuccess: ({ url }) => openSupersetLaunch(url),
+    onError: (err) => {
+      const text =
+        err instanceof ApiError ? err.message : t('templateStudio.launchFailed');
+      message.error(text);
+    },
+  });
+
+  const launchDashboardMutation = useMutation({
+    mutationFn: () => fetchTemplateLaunchUrl(id as string, 'dashboard_view'),
+    onSuccess: ({ url }) => openSupersetLaunch(url),
+    onError: (err) => {
+      const text =
+        err instanceof ApiError ? err.message : t('templateStudio.launchFailed');
+      message.error(text);
+    },
+  });
+
+  const pushDatasetMutation = useMutation({
+    mutationFn: () => pushTemplateDataset(id as string),
+    onSuccess: (saved) => {
+      queryClient.invalidateQueries({ queryKey: ['templates', id] });
+      queryClient.setQueryData(['templates', id], saved);
+      if (saved.superset_dataset_id) {
+        message.success(
+          t('templateStudio.pushDatasetSuccessWithId', {
+            id: saved.superset_dataset_id,
+          }),
+        );
+      } else {
+        message.success(t('templateStudio.pushDatasetSuccess'));
+      }
     },
     onError: (err) => {
       const text =
-        err instanceof ApiError ? err.message : t('templateStudio.previewFailed');
+        err instanceof ApiError ? err.message : t('templateStudio.pushDatasetFailed');
+      message.error(text);
+    },
+  });
+
+  const syncDashboardMutation = useMutation({
+    mutationFn: () => syncTemplateDashboard(id as string),
+    onSuccess: (saved) => {
+      queryClient.invalidateQueries({ queryKey: ['templates', id] });
+      queryClient.setQueryData(['templates', id], saved);
+      message.success(t('templateStudio.syncDashboardSuccess'));
+    },
+    onError: (err) => {
+      const text =
+        err instanceof ApiError ? err.message : t('templateStudio.syncDashboardFailed');
       message.error(text);
     },
   });
@@ -208,12 +252,36 @@ export function TemplateStudioPage() {
     await submitMutation.mutateAsync();
   };
 
-  const handlePreview = async () => {
-    if (isNew) {
-      message.warning(t('templateStudio.saveBeforePreview'));
+  const handleLaunchDesign = async () => {
+    if (!template?.superset_dataset_id) {
+      message.warning(t('templateStudio.pushDatasetFirst'));
       return;
     }
-    await previewMutation.mutateAsync();
+    await launchDesignMutation.mutateAsync();
+  };
+
+  const handleViewDashboard = async () => {
+    if (!template?.superset_dashboard_id) {
+      return;
+    }
+    await launchDashboardMutation.mutateAsync();
+  };
+
+  const handlePushDataset = async () => {
+    if (isNew) {
+      message.warning(t('templateStudio.saveBeforePush'));
+      return;
+    }
+    await handleSaveDraft();
+    await pushDatasetMutation.mutateAsync();
+  };
+
+  const handleSyncDashboard = async () => {
+    if (isNew) {
+      message.warning(t('templateStudio.saveBeforeSync'));
+      return;
+    }
+    await syncDashboardMutation.mutateAsync();
   };
 
   if (!isNew && templateQuery.isLoading) {
@@ -234,14 +302,6 @@ export function TemplateStudioPage() {
       />
     );
   }
-
-  const previewColumns =
-    preview?.columns.map((column) => ({
-      title: column,
-      dataIndex: column,
-      key: column,
-      ellipsis: true,
-    })) ?? [];
 
   return (
     <div className={styles.studio}>
@@ -311,37 +371,73 @@ export function TemplateStudioPage() {
         </Card>
       </div>
 
-      <Card title={t('templateStudio.previewTitle')}>
-        <Space style={{ marginBottom: 12 }}>
-          <Button
-            onClick={handlePreview}
-            loading={previewMutation.isPending}
-            disabled={isNew}
-          >
-            {t('templateStudio.runPreview')}
-          </Button>
-          {preview?.mock ? (
-            <Typography.Text type="secondary">
-              {t('templateStudio.previewMockHint')}
+      <Card title={t('templateStudio.supersetTitle')}>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            {t('templateStudio.supersetHint')}
+          </Typography.Paragraph>
+          <Space wrap>
+            <Button
+              onClick={handlePushDataset}
+              loading={pushDatasetMutation.isPending}
+              disabled={!isEditable || !isOwner || isNew}
+            >
+              {t('templateStudio.pushDataset')}
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleLaunchDesign}
+              loading={launchDesignMutation.isPending}
+              disabled={
+                !isEditable ||
+                !isOwner ||
+                isNew ||
+                !template?.superset_dataset_id
+              }
+            >
+              {t('templateStudio.startDesign')}
+            </Button>
+            <Button
+              onClick={handleSyncDashboard}
+              loading={syncDashboardMutation.isPending}
+              disabled={!isEditable || !isOwner || isNew}
+            >
+              {t('templateStudio.syncDashboard')}
+            </Button>
+          </Space>
+          {template?.superset_dataset_id ? (
+            <Typography.Text>
+              {t('templateStudio.datasetLinked', { id: template.superset_dataset_id })}
             </Typography.Text>
           ) : null}
+          {template?.superset_dashboard_id ? (
+            <Alert
+              type="success"
+              showIcon
+              message={t('templateStudio.dashboardLinkedTitle')}
+              description={
+                <Space direction="vertical" size="small">
+                  <Typography.Text>
+                    {t('templateStudio.dashboardLinkedDesc', {
+                      title: template.superset_dashboard_title ?? template.name,
+                      id: template.superset_dashboard_id,
+                    })}
+                  </Typography.Text>
+                  <Button
+                    onClick={handleViewDashboard}
+                    loading={launchDashboardMutation.isPending}
+                  >
+                    {t('templateStudio.viewDashboard')}
+                  </Button>
+                </Space>
+              }
+            />
+          ) : (
+            <Typography.Text type="secondary">
+              {t('templateStudio.dashboardPending')}
+            </Typography.Text>
+          )}
         </Space>
-        {preview ? (
-          <Table
-            size="small"
-            columns={previewColumns}
-            dataSource={preview.rows.map((row, index) => ({
-              ...row,
-              key: String(index),
-            }))}
-            pagination={false}
-            scroll={{ x: true }}
-          />
-        ) : (
-          <Typography.Text type="secondary">
-            {t('templateStudio.previewEmpty')}
-          </Typography.Text>
-        )}
       </Card>
 
       <Card>
@@ -364,7 +460,12 @@ export function TemplateStudioPage() {
               type="primary"
               onClick={handleSubmitReview}
               loading={submitMutation.isPending}
-              disabled={!isEditable || !isOwner || template?.status !== 'draft'}
+              disabled={
+                !isEditable ||
+                !isOwner ||
+                template?.status !== 'draft' ||
+                !template?.superset_dashboard_id
+              }
             >
               {t('templateStudio.submitReview')}
             </Button>

@@ -28,6 +28,9 @@ import { PlatformTenantsPage } from '@/pages/PlatformTenantsPage';
 import { TemplateStudioPage } from '@/features/templates/TemplateStudioPage';
 import { CnttApprovalsPage } from '@/pages/CnttApprovalsPage';
 import { CnttTemplatesPage } from '@/pages/CnttTemplatesPage';
+import { DeptApprovalsPage } from '@/pages/DeptApprovalsPage';
+import { DeptTemplatesPage } from '@/pages/DeptTemplatesPage';
+import { DeptTransactionsPage } from '@/pages/DeptTransactionsPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { HealthUiPage } from '@/pages/HealthUiPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -99,6 +102,30 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute route="/cntt/approvals">
             <CnttApprovalsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'dept/templates',
+        element: (
+          <RoleRoute route="/dept/templates">
+            <DeptTemplatesPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'dept/transactions',
+        element: (
+          <RoleRoute route="/dept/transactions">
+            <DeptTransactionsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'dept/approvals',
+        element: (
+          <RoleRoute route="/dept/approvals">
+            <DeptApprovalsPage />
           </RoleRoute>
         ),
       },

@@ -199,6 +199,10 @@ def login(
         ip_address=ip_address,
     )
 
+    from app.provisioning.events import request_user_provision
+
+    request_user_provision(user, tenant.slug, password=password)
+
     return LoginResult(
         session_id=session_id,
         ttl_seconds=ttl_seconds,

@@ -2,7 +2,7 @@
 
 > **Mục đích:** Đặc tả triển khai **tuần tự, có Gate kiểm duyệt** cho Portal quy trình kết xuất trên Apache Superset.  
 > **Nguyên tắc:** Mỗi Phase = **Backend + Frontend + Gate** → OK mới sang Phase tiếp theo.  
-> **Trạng thái:** v1.5 — Phase 0–5 đã triển khai; UI/UX (§14), auth test (§12), K8s LDAP/PKI (§13), multi-tenant (§2.2), **phân quyền loại tài khoản × phòng ban (§11.1)**.
+> **Trạng thái:** v1.6 — Phase 0–5 đã triển khai; **workflow thiết kế Superset-first (§1.3)**; UI/UX (§14), auth test (§12), K8s LDAP/PKI (§13), multi-tenant (§2.2), **phân quyền loại tài khoản × phòng ban (§11.1)**.
 
 ### Cách đọc tài liệu
 
@@ -91,16 +91,28 @@ End-user **không đăng nhập Superset trực tiếp**. Mọi thao tác đi qu
 ### 1.3. Luồng nghiệp vụ tổng quát (tham chiếu)
 
 ```
-[CNTT CV] ──AI──▶ SQL draft ──▶ [CNTT LD duyệt + share ALL|SELECTED]
-                                        │
-                                        ▼
-                              Mẫu publish → Superset
-                                        │
-[Ban NV CV] ◀── xem mẫu ────────────────┘
+[CNTT CV — Template Studio]
      │
-     ▼
- Tạo giao dịch kết xuất ──▶ [Ban NV LD duyệt] ──▶ Tải CSV/XLSX/PDF
+     ├─ AI / manual ──▶ SQL draft
+     ├─ [Đẩy SQL lên Superset] ──▶ dataset trên Superset
+     ├─ [Bắt đầu thiết kế trên Superset] ──▶ tab mới, Launch Bridge auto-login
+     │       └── CV thiết kế dashboard X trên Superset
+     ├─ [Đồng bộ dashboard] ──▶ Portal hiển thị dashboard X
+     └─ [Gửi duyệt] ──▶ Superset: dashboard X published, chỉ CNTT LD xem (DASHBOARD_RBAC)
+
+[CNTT LD — Hàng chờ duyệt]
+     ├─ [Mở trên Superset] ──▶ tab mới, auto-login, xem dashboard X
+     └─ [Duyệt & chia sẻ] ──▶ chọn phòng ban ALL|SELECTED
+              └── Provisioning gán DASHBOARD_RBAC cho role phòng ban trên Superset
+
+[Ban NV CV — Mẫu của phòng ban]
+     ├─ [Xem trên Superset] ──▶ tab mới, auto-login, standalone (chỉ xem, không in/kết xuất)
+     └─ Tạo giao dịch kết xuất CSV/PDF ──▶ [Ban NV LD duyệt] ──▶ Tải qua Portal API
 ```
+
+**Launch Bridge:** Portal mint JWT ngắn hạn (`aud=superset-launch`); Superset handler `/login/?portal_launch=…&next=…` thiết lập session cho user đã map provisioning, rồi redirect tới dataset/dashboard. End-user **không** đăng nhập Superset trực tiếp (P1).
+
+**Tách bước thiết kế vs duyệt:** Dashboard do CV thiết kế **thủ công trên Superset** (không auto-publish từ SQL). Portal chỉ đẩy SQL → dataset; publish/RBAC do workflow Portal điều khiển.
 
 ---
 
@@ -512,8 +524,9 @@ tenants ──1:1── tenant_settings
 | `name` | VARCHAR | Tên mẫu |
 | `description` | TEXT | |
 | `sql_snapshot` | TEXT | SQL tại thời điểm duyệt |
-| `superset_dashboard_id` | INT NULL | ID dashboard Superset sau publish |
-| `superset_dataset_id` | INT NULL | |
+| `superset_dashboard_id` | INT NULL | ID dashboard Superset do CV thiết kế |
+| `superset_dashboard_title` | VARCHAR NULL | Tiêu đề dashboard tại thời điểm sync |
+| `superset_dataset_id` | INT NULL | Dataset virtual tạo từ SQL push |
 | `status` | ENUM | `draft`, `review`, `published`, `archived` |
 | `share_mode` | ENUM NULL | `ALL`, `SELECTED` (set khi publish) |
 | `share_scope_version` | INT DEFAULT 0 | |
@@ -865,42 +878,45 @@ AND dept_code = '{{ current_user_dept() }}'
 
 ---
 
-### Phase 8: Workflow CNTT — Tạo & Duyệt Mẫu
+### Phase 8: Workflow CNTT — Tạo & Duyệt Mẫu (Superset-first)
 
-**Mục tiêu:** CV CNTT tạo mẫu (AI/manual) → LD CNTT duyệt → publish Superset.
+**Mục tiêu:** CV CNTT: AI/manual SQL → đẩy dataset Superset → thiết kế dashboard trên Superset → gửi duyệt → LD CNTT review trên Superset → duyệt + chia sẻ phòng ban.
 
 | Lớp | Phạm vi |
 |---|---|
-| **Backend** | Template FSM, publish dashboard, API §8.3 |
-| **Frontend** | **Template Studio** (§14.6): split view SQL + preview, timeline trạng thái, **Approval Inbox** LD CNTT |
+| **Backend** | Template FSM, `push-dataset`, `sync-dashboard`, Launch URL, submit → reviewer RBAC, approve → dept RBAC + share |
+| **Frontend** | **Template Studio** (§14.6): nút Đẩy SQL / Bắt đầu thiết kế / Đồng bộ dashboard; **Approval Inbox** + Mở Superset + ShareScopePicker |
 
 **Deliverables:**
-- [ ] Template CRUD + submit/approve/reject
-- [ ] **UI Studio:** Monaco/SQL editor, AI panel (Phase 7), status `Draft→Review→Published`
-- [ ] **UI Inbox:** bảng hàng chờ, drawer chi tiết, nút Duyệt/Từ chối + comment bắt buộc khi reject
-- [ ] PKI ON → step-up modal khi approve
+- [ ] `POST /templates/{id}/push-dataset` — tạo virtual dataset từ SQL
+- [ ] `GET /templates/{id}/launch-url?target=…` — Launch Bridge URL (dataset / dashboard_design / dashboard_review / dashboard_view)
+- [ ] `POST /templates/{id}/sync-dashboard` — liên kết dashboard CV vừa tạo
+- [ ] Submit: bắt buộc dataset + dashboard; Superset DASHBOARD_RBAC chỉ CNTT LD
+- [ ] Approve: body `share_mode` + `department_ids`; provisioning mở dashboard cho phòng ban
+- [ ] **UI Studio:** card Superset, alert dashboard đã liên kết
+- [ ] **UI Inbox:** nút Mở Superset, modal Duyệt & chia sẻ
 
-**Gate 8:** End-to-end CNTT workflow; UI responsive; reject có comment hiển thị CV.
+**Gate 8:** End-to-end: push → design (tab mới) → sync → submit → LD review (tab mới) → approve + share.
 
-**Phụ thuộc:** Gate 7
+**Phụ thuộc:** Gate 7, Superset Launch Bridge handler (§9.5)
 
 ---
 
 ### Phase 9: Chia sẻ Mẫu ALL / SELECTED
 
-**Mục tiêu:** LD CNTT chọn phạm vi chia sẻ khi publish / sửa sau publish.
+**Mục tiêu:** LD CNTT chọn phạm vi chia sẻ **khi duyệt** (gộp vào approve Phase 8); sửa phạm vi sau publish.
 
 | Lớp | Phạm vi |
 |---|---|
-| **Backend** | `share_mode`, `template_shares`, ShareResolver, DASHBOARD_RBAC |
-| **Frontend** | **Share Scope Modal** (§14.6): radio ALL / multi-select dept, badge `3/12 phòng ban` |
+| **Backend** | `share_mode`, `template_department_shares`, ShareResolver, DASHBOARD_RBAC dept roles |
+| **Frontend** | **ShareScopePicker** trong modal Duyệt (§14.6) |
 
 **Deliverables:**
-- [ ] Publish + share API
-- [ ] **UI:** Modal với search dept, “Chọn tất cả”, preview danh sách được share
-- [ ] Sửa phạm vi → confirm + version audit
+- [ ] Approve body: `share_mode`, `department_ids`
+- [ ] `PATCH /templates/{id}/share-scope` — sửa sau publish
+- [ ] **UI:** badge phạm vi trên card mẫu phòng ban
 
-**Gate 9:** Scenarios ALL/SELECTED/thu hồi (spec trước); UI badge phạm vi trên card mẫu.
+**Gate 9:** ALL/SELECTED/thu hồi; dept user chỉ xem dashboard qua Launch (standalone, không export UI).
 
 **Phụ thuộc:** Gate 8
 
@@ -908,12 +924,12 @@ AND dept_code = '{{ current_user_dept() }}'
 
 ### Phase 10: Giao dịch Kết xuất — Ban NV Chuyên viên
 
-**Mục tiêu:** CV Ban tạo giao dịch, preview, gửi duyệt — **không** download.
+**Mục tiêu:** CV Ban xem dashboard trên Superset (Launch, view-only) → tạo giao dịch preview → gửi duyệt — **không** download trực tiếp từ Superset.
 
 | Lớp | Phạm vi |
 |---|---|
-| **Backend** | `export_transactions`, preview API, `draft→submitted` |
-| **Frontend** | **Mẫu của tôi** (card grid), **Wizard giao dịch** 3 bước (§14.7) |
+| **Backend** | `export_transactions`, preview API, `launch-url?target=dashboard_view` |
+| **Frontend** | **Mẫu của tôi** — card + **Xem trên Superset**; **Wizard giao dịch** 3 bước (§14.7) |
 
 **Wizard UI:** (1) Chọn mẫu → (2) Tham số dynamic form → (3) Preview + Gửi duyệt
 
@@ -1106,11 +1122,13 @@ Body upload CA (Phase 2–3):
 |---|---|---|---|
 | POST | `/ai/generate-sql` | 7 | AI sinh SQL |
 | CRUD | `/templates` | 8 | |
-| POST | `/templates/{id}/submit` | 8 | |
-| POST | `/templates/{id}/approve` | 8 | |
+| POST | `/templates/{id}/push-dataset` | 8 | Tạo virtual dataset từ SQL |
+| GET | `/templates/{id}/launch-url` | 8 | Query `target`: dataset, dashboard_design, dashboard_review, dashboard_view |
+| POST | `/templates/{id}/sync-dashboard` | 8 | Liên kết dashboard CV thiết kế trên Superset |
+| POST | `/templates/{id}/submit` | 8 | RBAC reviewer-only trên Superset |
+| POST | `/templates/{id}/approve` | 8–9 | Body: `share_mode`, `department_ids` |
 | POST | `/templates/{id}/reject` | 8 | |
-| POST | `/templates/{id}/publish` | 9 | Body: share_mode, department_ids |
-| PATCH | `/templates/{id}/share-scope` | 9 | |
+| PATCH | `/templates/{id}/share-scope` | 9 | Sửa phạm vi sau publish |
 
 ### 8.5. Transactions (Phase 10–11)
 
@@ -1165,6 +1183,26 @@ MCP_RBAC_ENABLED = True
 
 - **Không** gán `can_export_data` / `can_export_csv` cho end-user roles
 - Chỉ Portal service account có quyền query/export qua API
+- **Launch Bridge** (§1.3): JWT `aud=superset-launch`, TTL ≤ 120s, map `sub` → Superset username `t_{tenant}__{portal_user}`
+
+### 9.5. Superset Launch Bridge (Phase 8+)
+
+Handler trên Superset (custom view hoặc middleware login):
+
+1. Nhận `portal_launch` JWT + `next` path
+2. Verify HS256 với secret dùng chung Portal (`MCP_JWT_SECRET` / `SUPERSET_LAUNCH_JWT_SECRET`)
+3. `sub` → user Superset; tạo session Flask-Login
+4. Redirect `next` (dataset explore hoặc dashboard standalone/edit)
+
+Deep link:
+
+| `target` | Path Superset |
+|---|---|
+| `dataset` | `/explore/?datasource_type=table&datasource_id={id}` |
+| `dashboard_design` | `/superset/dashboard/{id}/?edit=true` |
+| `dashboard_review` / `dashboard_view` | `/superset/dashboard/{id}/?standalone=1` |
+
+View-only (dept user): `standalone=1` + role **không** có export permissions; kết xuất chỉ qua Portal Phase 11.
 
 ---
 
@@ -2113,18 +2151,18 @@ export const defaultTokens = {
 │ AI Assistant panel  │ SQL Editor (Monaco)    │
 │ [prompt] [Generate] │                      │
 ├─────────────────────┴──────────────────────┤
+│ Superset: [Đẩy SQL] [Bắt đầu thiết kế] [Đồng bộ dashboard] │
+│ Dashboard liên kết: "X" (#id) hoặc chờ sync                │
+├────────────────────────────────────────────┤
 │ Preview table (100 rows max)               │
 ├────────────────────────────────────────────┤
 │ Status: Draft ●  [Lưu nháp] [Gửi duyệt]   │
 └────────────────────────────────────────────┘
 ```
 
-**Approval Inbox LD CNTT:** Table + `StatusBadge` + row action `Xem` → drawer với SQL readonly, preview, nút **Duyệt & Chia sẻ** mở Share Modal.
+**Approval Inbox LD CNTT:** Table + drawer: dashboard link, **[Mở trên Superset]**, SQL readonly, preview. **Duyệt** → ShareScopePicker modal (ALL / chọn PB) → provisioning RBAC.
 
-**Share Scope Modal:**
-- Radio: ○ Tất cả phòng ban · ○ Chọn phòng ban
-- Multi-select có search; chip hiển thị dept đã chọn
-- Summary: “Mẫu sẽ hiển thị cho **12** phòng ban”
+**Dept templates (Phase 10):** Card mẫu + **[Xem trên Superset]** (standalone, không in/export UI).
 
 ### 14.7. Màn hình Ban nghiệp vụ (Phase 10–11)
 
@@ -2203,6 +2241,6 @@ Tạo trong `portal/frontend/src/components/` — **reuse**, không duplicate:
 
 ---
 
-**Phiên bản:** 1.5  
+**Phiên bản:** 1.6  
 **Cập nhật:** 2026-06-07  
-**Trạng thái:** Phase 0–5 triển khai (Gate 5 provisioning). Phân quyền: §11.1 (loại tài khoản × phòng ban). UI: §14. Auth: §12. K8s: §13. Multi-tenant: §2.2.
+**Trạng thái:** Phase 0–5 triển khai (Gate 5 provisioning). Workflow Superset-first: §1.3. Phân quyền: §11.1. UI: §14. Auth: §12. K8s: §13. Multi-tenant: §2.2.

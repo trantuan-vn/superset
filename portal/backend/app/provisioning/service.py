@@ -47,7 +47,9 @@ from app.provisioning.blueprint import (
     dept_cv_role_name,
     dept_ld_role_name,
     dept_role_names,
+    dept_view_permission_allowed,
     inactive_role_name,
+    is_dept_blueprint,
     is_export_permission,
     portal_user_needs_superset_sync,
     superset_role_names_for_user,
@@ -70,7 +72,7 @@ from app.provisioning.superset_client import (
 
 logger = logging.getLogger(__name__)
 
-PAGE_SIZE = 500
+PAGE_SIZE = 100
 
 
 @dataclass(frozen=True)
@@ -196,6 +198,7 @@ class ProvisioningService:
         *,
         dept_code: str | None = None,
         dept_role: DeptRole | None = None,
+        password: str | None = None,
     ) -> ProvisioningResult:
         """Create or update a Superset user with mapped roles."""
         if not portal_user_needs_superset_sync(user):
@@ -217,9 +220,12 @@ class ProvisioningService:
             dept_code=dept_code,
             dept_role=dept_role,
             system_role=user.system_role,
+            password=password,
         )
 
-    def sync_user_by_id(self, user_id: uuid.UUID) -> ProvisioningResult | None:
+    def sync_user_by_id(
+        self, user_id: uuid.UUID, *, password: str | None = None
+    ) -> ProvisioningResult | None:
         """Load user with dept assignments and sync to Superset."""
         user = self._db.scalar(
             select(User)
@@ -245,6 +251,7 @@ class ProvisioningService:
             tenant.slug,
             dept_code=dept_code,
             dept_role=dept_role,
+            password=password,
         )
 
     def reconcile_tenant(self, tenant_id: uuid.UUID) -> list[ProvisioningResult]:
@@ -720,6 +727,7 @@ class ProvisioningService:
         dept_code: str | None,
         dept_role: DeptRole | None,
         system_role: SystemRole,
+        password: str | None = None,
     ) -> ProvisioningResult:
         log = self._get_or_create_log(
             tenant_id=tenant_id,
@@ -760,12 +768,19 @@ class ProvisioningService:
             first_name, last_name = split_display_name(display_name)
             existing = self._client.find_user_by_username(username)
             if existing is None:
+                if not password:
+                    return self._mark_skipped(
+                        log,
+                        "Password required for initial Superset sync; "
+                        "log in to Portal or create user with password",
+                    )
                 created = self._client.create_user(
                     username=username,
                     email=email,
                     first_name=first_name,
                     last_name=last_name,
                     role_ids=role_ids,
+                    password=password,
                     active=active,
                 )
                 return self._mark_success(log, created.id)
@@ -778,12 +793,17 @@ class ProvisioningService:
                 role_ids=role_ids,
                 active=active,
             )
+            if password:
+                self._client.update_user_password(existing.id, password)
             return self._mark_success(log, existing.id)
         except SupersetClientError as exc:
             return self._mark_failure(log, str(exc))
 
     def _resolve_blueprint_permission_ids(self, blueprint: RoleBlueprint) -> list[int]:
         permission_map = self._load_permission_labels()
+        if is_dept_blueprint(blueprint):
+            return self._resolve_dept_view_permission_ids(permission_map, blueprint)
+
         merged: set[int] = set()
 
         for base_role_name in base_roles_for_blueprint(blueprint):
@@ -800,6 +820,21 @@ class ProvisioningService:
 
         merged.update(self._dataset_access_permission_ids(permission_map))
         return sorted(merged)
+
+    def _resolve_dept_view_permission_ids(
+        self, permission_map: dict[int, str], blueprint: RoleBlueprint
+    ) -> list[int]:
+        """View permissions for dept users; leaders also receive dashboard export."""
+        matched: set[int] = set()
+        for perm_id, label in permission_map.items():
+            if " on " not in label:
+                continue
+            perm_name, view_name = label.split(" on ", 1)
+            if dept_view_permission_allowed(perm_name, view_name, blueprint=blueprint):
+                matched.add(perm_id)
+
+        matched.update(self._dataset_access_permission_ids(permission_map))
+        return sorted(matched)
 
     def _dataset_access_permission_ids(
         self, permission_map: dict[int, str]
@@ -849,7 +884,7 @@ class ProvisioningService:
                 view_name = str(view.get("name") or "")
                 mapping[int(item["id"])] = f"{perm_name} on {view_name}"
             page += 1
-            if page * len(results) >= total:
+            if len(mapping) >= total:
                 break
 
         self._permission_name_cache = mapping

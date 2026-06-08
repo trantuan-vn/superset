@@ -26,6 +26,7 @@ from app.api.schemas import (
     AssignDeptRoleRequest,
     CreateUserRequest,
     MessageResponse,
+    SetUserPasswordRequest,
     UpdateUserRequest,
     UserAdminResponse,
 )
@@ -38,6 +39,7 @@ from app.departments.service import (
     get_user_in_tenant,
     list_users,
     remove_dept_role,
+    set_user_password,
     update_user,
     user_to_dict,
 )
@@ -160,6 +162,28 @@ def update_user_api(
     except DeptError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return UserAdminResponse(**user_to_dict(updated))
+
+
+@router.post("/{user_id}/password", response_model=MessageResponse)
+def set_user_password_api(
+    user_id: uuid.UUID,
+    body: SetUserPasswordRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User, Depends(require_tenant_admin_or_cntt_lanhdao)],
+) -> MessageResponse:
+    try:
+        set_user_password(
+            db,
+            tenant_id=user.tenant_id,
+            user_id=user_id,
+            password=body.password,
+            actor=user,
+            ip_address=_client_ip(request),
+        )
+    except DeptError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    return MessageResponse(message="Password updated and Superset sync queued")
 
 
 @router.post("/{user_id}/dept-roles", response_model=UserAdminResponse)

@@ -35,8 +35,9 @@ from app.provisioning.events import (
     request_user_provision,
 )
 from app.models.department import Department, DepartmentStatus, DeptRole, UserDeptRole
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, TenantSettings
 from app.models.user import SystemRole, User, UserStatus
+from app.tenants.ldap_sync import sync_user_to_ldap
 
 _CODE_PATTERN = re.compile(r"^[A-Z0-9_]{2,64}$")
 
@@ -339,8 +340,17 @@ def create_user(
     created = get_user_in_tenant(db, tenant_id, user.id)
     tenant = db.get(Tenant, tenant_id)
     if tenant is not None:
-        request_user_provision(created, tenant.slug)
-    return created
+        settings = db.get(TenantSettings, tenant_id)
+        if settings is not None:
+            sync_user_to_ldap(
+                db,
+                user=created,
+                settings=settings,
+                plain_password=password,
+            )
+            db.commit()
+        request_user_provision(created, tenant.slug, password=password)
+    return get_user_in_tenant(db, tenant_id, user.id)
 
 
 def update_user(
@@ -408,6 +418,67 @@ def update_user(
     if tenant is not None:
         request_user_provision(updated, tenant.slug)
     return updated
+
+
+def _dept_provision_context(user: User) -> tuple[str | None, DeptRole | None]:
+    if not user.dept_roles:
+        return None, None
+    assignment = user.dept_roles[0]
+    if assignment.department is None:
+        return None, assignment.role
+    return assignment.department.code, assignment.role
+
+
+def set_user_password(
+    db: Session,
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    password: str,
+    actor: User,
+    ip_address: str | None = None,
+) -> User:
+    """Set Portal login password and queue Superset password sync."""
+    user = get_user_in_tenant(db, tenant_id, user_id)
+    if not can_modify_user(actor, user):
+        raise DeptError("You cannot modify this user", status_code=403)
+    if len(password) < 8:
+        raise DeptError("Password must be at least 8 characters", status_code=422)
+
+    user.password_hash = hash_password(password)
+    db.commit()
+
+    write_audit_log(
+        db,
+        tenant_id=tenant_id,
+        action="USER_PASSWORD_SET",
+        entity_type="user",
+        entity_id=str(user.id),
+        actor_id=actor.id,
+        payload={},
+        ip_address=ip_address,
+    )
+    updated = get_user_in_tenant(db, tenant_id, user_id)
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is not None:
+        settings = db.get(TenantSettings, tenant_id)
+        if settings is not None:
+            sync_user_to_ldap(
+                db,
+                user=updated,
+                settings=settings,
+                plain_password=password,
+            )
+            db.commit()
+        dept_code, dept_role = _dept_provision_context(updated)
+        request_user_provision(
+            updated,
+            tenant.slug,
+            dept_code=dept_code,
+            dept_role=dept_role,
+            password=password,
+        )
+    return get_user_in_tenant(db, tenant_id, user_id)
 
 
 def assign_dept_role(
@@ -487,13 +558,23 @@ def assign_dept_role(
     updated = get_user_in_tenant(db, tenant_id, user_id)
     tenant = db.get(Tenant, tenant_id)
     if tenant is not None:
+        settings = db.get(TenantSettings, tenant_id)
+        if settings is not None:
+            sync_user_to_ldap(
+                db,
+                user=updated,
+                settings=settings,
+                plain_password=None,
+                clear_local_password=False,
+            )
+            db.commit()
         request_user_provision(
             updated,
             tenant.slug,
             dept_code=dept.code,
             dept_role=role,
         )
-    return updated
+    return get_user_in_tenant(db, tenant_id, user_id)
 
 
 def remove_dept_role(

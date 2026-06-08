@@ -135,6 +135,36 @@ def test_normalize_code_rejects_invalid() -> None:
         _normalize_code("bad code!")
 
 
+def test_set_user_password_as_admin() -> None:
+    admin = _admin()
+    target = User(
+        id=uuid.uuid4(),
+        tenant_id=DEMO_TENANT_ID,
+        username="nv@demo-corp",
+        email="nv@demo-corp",
+        display_name="NV",
+        password_hash="old",
+        system_role=SystemRole.DEPT_USER,
+        status=UserStatus.ACTIVE,
+    )
+    app.dependency_overrides[require_tenant_admin_or_cntt_lanhdao] = lambda: admin
+    try:
+        with patch(
+            "app.api.users.set_user_password",
+            return_value=target,
+        ) as mock_set:
+            response = client.post(
+                f"/users/{target.id}/password",
+                json={"password": "NewPass123!"},
+            )
+        assert response.status_code == 200
+        assert "Superset" in response.json()["message"]
+        mock_set.assert_called_once()
+        assert mock_set.call_args.kwargs["password"] == "NewPass123!"
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_assign_dept_role_rejects_second_department() -> None:
     from unittest.mock import MagicMock
 

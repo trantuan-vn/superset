@@ -22,6 +22,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.templates import router as templates_router
+from app.api.dept import router as dept_router
+from app.api.transactions import router as transactions_router
 from app.api.ai import router as ai_router
 from app.api.auth import router as auth_router
 from app.api.departments import router as departments_router
@@ -73,3 +75,5 @@ app.include_router(users_router)
 app.include_router(provisioning_router)
 app.include_router(ai_router)
 app.include_router(templates_router)
+app.include_router(dept_router)
+app.include_router(transactions_router)

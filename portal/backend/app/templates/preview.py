@@ -54,7 +54,11 @@ def _extract_columns(sql: str) -> list[str]:
 
 
 def preview_sql(sql: str) -> dict[str, Any]:
-    """Return up to 100 preview rows after validating read-only SQL."""
+    """Return mock preview rows for template design-time validation only.
+
+    Approved export downloads execute the linked Superset dataset with the
+    requesting user's RLS/Jinja context instead of using this helper.
+    """
     validation = validate_read_only_sql(sql)
     if not validation.valid:
         raise ValueError(validation.reason or "Invalid SQL")
